@@ -1,0 +1,60 @@
+name: ZeroSentinel
+version: '${project.version}'
+main: clre20.zeroSentinel.ZeroSentinel
+api-version: '26.3'
+author: clre20
+description: 低誤判、高準確度的反作弊插件。
+website: https://github.com/clre20/ZeroSentinel
+depend: [packetevents]
+softdepend: [floodgate, ViaVersion, PMonitor]
+libraries:
+  - org.xerial:sqlite-jdbc:3.54.1.0
+
+commands:
+  zerosentinel:
+    description: ZeroSentinel 主指令
+    usage: /<command> help
+    aliases: [zs]
+
+permissions:
+  zerosentinel.*:
+    description: ZeroSentinel 所有權限
+    default: op
+    children:
+      zerosentinel.admin: true
+  zerosentinel.admin:
+    description: ZeroSentinel 所有管理權限
+    default: op
+    children:
+      zerosentinel.gui: true
+      zerosentinel.help: true
+      zerosentinel.version: true
+      zerosentinel.reload: true
+      zerosentinel.record: true
+      zerosentinel.lookup: true
+      zerosentinel.verdict: true
+      zerosentinel.debug: true
+  zerosentinel.gui:
+    description: 開啟箱子 UI（/zs）
+    default: op
+  zerosentinel.help:
+    description: 查看指令說明（/zs help）
+    default: op
+  zerosentinel.version:
+    description: 檢查更新（/zs version），並在登入時收到新版本提醒
+    default: op
+  zerosentinel.reload:
+    description: 重新載入設定（/zs reload）
+    default: op
+  zerosentinel.record:
+    description: 錄製玩家封包（/zs record）
+    default: op
+  zerosentinel.lookup:
+    description: 以錯誤碼查詢事件（/zs lookup）
+    default: op
+  zerosentinel.verdict:
+    description: 判定事件為合法或作弊（/zs verdict）
+    default: op
+  zerosentinel.debug:
+    description: 測試用指令（/zs debug），需在 config.yml 開啟 debug.enabled
+    default: op

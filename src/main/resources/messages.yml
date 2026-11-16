@@ -1,0 +1,149 @@
+# ZeroSentinel 訊息檔
+# 支援 & 色碼與 {變數}。缺少的項目會在啟動與 /zs reload 時自動補齊。
+# 把訊息設為空字串 '' 可以不顯示該訊息。
+
+prefix: '&8[&bZeroSentinel&8] &r'
+
+# 發給被偵測玩家的訊息（不加前綴、不透露是哪個檢查，只附錯誤碼）
+player:
+  warn: '&e偵測到異常操作，若為誤判請將錯誤碼提供給管理員：&f{code}'
+
+command:
+  no-permission: '&c你沒有權限使用這個功能。'
+  unknown: '&c未知的指令，請輸入 &f/{label} help &c查看說明。'
+  reloaded: '&a已重新載入 config.yml 與 messages.yml。'
+  player-not-found: '&c找不到線上玩家 &f{player}&c。'
+  invalid-number: '&c&f{input} &c不是有效的秒數。'
+  database-error: '&c讀取資料庫失敗，請查看後台紀錄。'
+
+help:
+  header: '&bZeroSentinel &7v{version} 指令說明'
+  gui: '&f/{label} &7- 開啟管理介面'
+  record: '&f/{label} record <玩家> [秒數] &7- 存下最近的封包並繼續錄製'
+  record-stop: '&f/{label} record stop <玩家> &7- 提前停止錄製並存檔'
+  lookup: '&f/{label} lookup <錯誤碼> &7- 查詢錯誤碼對應的事件'
+  verdict: '&f/{label} verdict <事件ID或錯誤碼> <legit|cheat> [備註] &7- 判定事件'
+  debug: '&f/{label} debug flag <玩家> &7- 建立測試事件（需開啟 debug.enabled）'
+  reload: '&f/{label} reload &7- 重新載入設定'
+  version: '&f/{label} version &7- 檢查更新'
+
+record:
+  started: '&a開始錄製 &f{player}&a：包含最近 {buffer} 秒，並持續 {seconds} 秒。'
+  already: '&e{player} 已經在錄製中。'
+  stopped: '&a已停止錄製 &f{player} &a並存檔。'
+  not-recording: '&e{player} 目前沒有在錄製。'
+  disabled: '&c錄製功能已在 config.yml 關閉。'
+  not-tracked: '&c{player} 尚未被追蹤（請等對方重新進服）。'
+
+lookup:
+  searching: '&7查詢中…'
+  invalid-code: '&c錯誤碼 &f{input} &c格式錯誤或檢查碼不符，請確認是否抄錯。'
+  not-found: '&c找不到錯誤碼 &f{code}&c（可能已超過保留天數）。'
+  header: '&b─── 事件 &f{event} &b───'
+  code-issued: '&7錯誤碼 &f{code} &7發出時間：&f{time} &8({type})'
+  player: '&7玩家：&f{player} &8({uuid})'
+  category: '&7分類：&f{category}'
+  time: '&7時間：&f{created} &7～ &f{last}'
+  violations: '&7違規次數：&f{count}'
+  verdict: '&7判定：{verdict}'
+  verdict-detail: '&7　由 &f{by} &7於 &f{time} &7判定，備註：&f{note}'
+  recording: '&7錄製檔：&f{file}'
+  no-recording: '&7錄製檔：&8無'
+  codes: '&7錯誤碼（{count} 組）：&f{codes}'
+  no-codes: '&8無'
+  more-codes: '&7 …共 {count} 組'
+
+verdict:
+  none: '&7未判定'
+  legit: '&a合法'
+  cheat: '&c作弊'
+  invalid-target: '&c&f{input} &c不是有效的事件 ID 或錯誤碼。'
+  not-found: '&c找不到這個事件。'
+  done: '&a已將事件 &f{event} &a判定為 {verdict}&a。'
+
+debug:
+  disabled: '&c測試指令未開啟，請在 config.yml 設定 debug.enabled: true。'
+  flagged: '&a已對 &f{player} &a建立測試違規（{new}&a，第 {count} 次）。事件 &f{event}&a，錯誤碼 &f{code}'
+  new: '&a新事件'
+  merged: '&e併入既有事件'
+
+update:
+  checking: '&7正在檢查更新…'
+  outdated: '&e發現新版本 &fv{latest}&e（目前 v{current}）：&f{url}'
+  up-to-date: '&a目前已是最新版本 v{current}。'
+  dev-build: '&b目前版本 v{current} 比 GitHub 最新版 v{latest} 新（開發版）。'
+  no-release: '&7GitHub 尚未發布任何 Release（目前 v{current}）。'
+  failed: '&c檢查更新失敗，請稍後再試。'
+  join-notify: '&eZeroSentinel 有新版本 &fv{latest}&e（目前 v{current}）：&f{url}'
+
+gui:
+  player-offline: '&c該玩家已離線。'
+  common:
+    prev: '&e上一頁'
+    next: '&e下一頁'
+    back: '&e返回'
+    close: '&c關閉'
+    refresh: '&b重新整理'
+    loading: '&7載入中…'
+    load-failed: '&c載入失敗'
+    'yes': '&a是'
+    'no': '&7否'
+  main:
+    title: '&8ZeroSentinel ─ 玩家列表 ({page}/{pages})'
+    player-name: '&f{player}'
+    player-lore:
+      - '&7左鍵查看'
+  player:
+    title: '&8ZeroSentinel ─ {player}'
+    info-name: '&f{player}'
+    info-lore:
+      - '&7UUID：&f{uuid}'
+      - '&7客戶端協議：&f{protocol}'
+      - '&7基岩版：{bedrock}'
+      - '&7錄製：{status}'
+    status-recording: '&c錄製中（剩 {seconds} 秒）'
+    status-idle: '&7未錄製'
+    record-start: '&a開始錄製'
+    record-start-lore:
+      - '&7包含最近 {buffer} 秒，並持續 {seconds} 秒'
+      - '&e左鍵開始'
+    record-stop: '&c停止錄製'
+    record-stop-lore:
+      - '&7剩餘 {seconds} 秒'
+      - '&e左鍵停止並存檔'
+    no-events: '&7沒有事件紀錄'
+    event-name: '&f{category} &7{time}'
+    event-lore:
+      - '&7事件：&f{event}'
+      - '&7違規次數：&f{count}'
+      - '&7判定：{verdict}'
+      - '&e左鍵查看'
+  event:
+    title: '&8事件 {event}'
+    not-found: '&c找不到這個事件'
+    info-name: '&b事件 &f{event}'
+    info-lore:
+      - '&7玩家：&f{player}'
+      - '&7分類：&f{category}'
+      - '&7時間：&f{created}'
+      - '&7最後：&f{last}'
+      - '&7違規次數：&f{count}'
+      - '&7判定：{verdict}'
+      - '&7判定者：&f{by}'
+      - '&7備註：&f{note}'
+    code-name: '&f{code}'
+    code-lore:
+      - '&7發出時間：&f{time}'
+      - '&7訊息類型：&f{type}'
+    recording-name: '&b錄製檔'
+    recording-lore:
+      - '&f{file}'
+    no-recording: '&7沒有錄製檔'
+    legit: '&a判定為合法'
+    legit-lore:
+      - '&7誤判時使用'
+      - '&e左鍵判定'
+    cheat: '&c判定為作弊'
+    cheat-lore:
+      - '&7確認作弊時使用'
+      - '&e左鍵判定'

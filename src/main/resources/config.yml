@@ -1,0 +1,59 @@
+# ZeroSentinel 設定檔
+# 缺少的項目會在啟動與 /zs reload 時自動補齊，原本的設定值會保留。
+
+# 封包錄製
+record:
+  # 是否錄製（關閉後不追蹤任何玩家，也不佔用緩衝區記憶體）
+  enabled: true
+  # 每位玩家的環形緩衝區大小（KB，32～4096）。100 人約佔 buffer-kb × 100 的記憶體
+  buffer-kb: 256
+  # 開始錄製時，往前保留幾秒的封包（1～60）
+  buffer-seconds: 10
+  # 單一封包超過這個大小（KB）只記錄封包 ID 與長度（1～1024）
+  max-packet-kb: 32
+  # 產生新事件時自動錄製
+  on-flag: true
+  # 事件觸發後再繼續錄幾秒（0～60）
+  after-flag-seconds: 5
+  # 手動錄製（/zs record）的最長秒數（1～3600）
+  manual-max-seconds: 300
+  # 單一錄製檔的最大未壓縮容量（MB，1～1024），超過就自動結束
+  max-session-mb: 32
+
+storage:
+  recordings:
+    # 錄製檔總容量上限（MB，0 = 不限制）。超過時從最舊的檔案開始刪除
+    max-total-mb: 2048
+    # 錄製檔保留天數（0 = 不限制）
+    retention-days: 30
+  database:
+    # 每幾秒批次寫入一次（1～300）
+    flush-seconds: 5
+    # 累積幾筆就立即寫入（10～10000）
+    batch-size: 500
+    # 記憶體快取的事件數（100～100000），錯誤碼快取為兩倍
+    cache-size: 2000
+    # 事件與錯誤碼保留天數（0 = 不限制）
+    retention-days: 30
+
+events:
+  # 同一位玩家、同一個分類在幾秒內的連續違規算同一個事件（1～3600）
+  merge-window-seconds: 60
+
+gui:
+  # 在箱子 UI 按「開始錄製」時錄製的秒數（不會超過 record.manual-max-seconds）
+  record-seconds: 60
+
+display:
+  # 時間顯示格式（Java DateTimeFormatter 格式）
+  time-format: 'yyyy-MM-dd HH:mm:ss'
+
+debug:
+  # 開啟 /zs debug 測試指令（正式環境請保持關閉）
+  enabled: false
+
+update-checker:
+  # 啟動時檢查 GitHub 是否有新版本
+  check-on-startup: true
+  # 有 zerosentinel.version 權限的管理員登入 3 秒後提醒新版本
+  notify-on-join: true
