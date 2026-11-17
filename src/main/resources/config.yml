@@ -15,7 +15,7 @@ record:
   on-flag: true
   # 事件觸發後再繼續錄幾秒（0～60）
   after-flag-seconds: 5
-  # 手動錄製（/zs record）的最長秒數（1～3600）
+  # 手動錄製（/zs record）的最長秒數（1～3600）。指令要求的秒數超過時會改為這個值並提示
   manual-max-seconds: 300
   # 單一錄製檔的最大未壓縮容量（MB，1～1024），超過就自動結束
   max-session-mb: 32
@@ -33,7 +33,7 @@ storage:
     batch-size: 500
     # 記憶體快取的事件數（100～100000），錯誤碼快取為兩倍
     cache-size: 2000
-    # 事件與錯誤碼保留天數（0 = 不限制）
+    # 事件、錯誤碼與信用點數修改紀錄的保留天數（0 = 不限制）
     retention-days: 30
 
 events:
@@ -47,6 +47,66 @@ gui:
 display:
   # 時間顯示格式（Java DateTimeFormatter 格式）
   time-format: 'yyyy-MM-dd HH:mm:ss'
+
+# 檢查
+checks:
+  # 進服、切換世界、重生後幾秒內不檢查
+  join-grace-seconds: 15
+  # 客戶端尚未回報載入完成時，最多再等幾秒才開始檢查
+  max-load-wait-seconds: 60
+  # 通知有 zerosentinel.alerts 權限的管理員
+  alerts: true
+
+  # 客戶端回報異常：正常的 Java 版客戶端每秒至少會送 1 個移動或 tick 結束封包
+  client-report:
+    enabled: true
+    # 超過幾秒沒有移動 / tick 結束封包（但其他封包照常送達）算一次違規
+    silence-seconds: 10
+    # 持續異常時，每隔幾秒再算一次違規
+    interval-seconds: 10
+    # 正常信用下累積幾次違規踢出（會依信用點數調整，見 trust.high / trust.low）
+    kick-after: 6
+    # 踢出後幾分鐘內重新進服又違規，下一次檢查就直接踢出（0 = 關閉）
+    repeat-kick-minutes: 30
+    # 每次違規扣的信用點數
+    trust-per-violation: 5
+    # 踢出時再扣的信用點數
+    trust-per-kick: 30
+    # 超過幾秒沒有違規，違規次數歸零
+    remove-violations-after: 60
+    # 是否檢查基岩版玩家（封包經 Geyser 轉換，預設不檢查）
+    check-bedrock: false
+
+# 信用點數
+trust:
+  # 新玩家的初始分數
+  start: 500
+  # 分數上限
+  max: 1000
+  # 分數小於或等於這個值就無法進服（-1 = 關閉此功能）
+  deny-join-at: 0
+  # 連續在線且沒有違規時加分
+  gain:
+    amount: 2
+    every-minutes: 30
+    daily-cap: 20
+  # 高信用：處罰前需要的違規次數 × multiplier
+  high:
+    threshold: 800
+    multiplier: 2.0
+  # 低信用：處罰前需要的違規次數 × multiplier
+  low:
+    threshold: 300
+    multiplier: 0.5
+
+# 伺服器卡頓
+lag:
+  # 看門狗偵測到所有執行緒停頓超過幾毫秒，視為伺服器整體停頓
+  stall-threshold-ms: 1000
+  # 停頓後幾秒內不累積違規
+  grace-seconds: 5
+  # TPS 低於這個值時暫停處罰（只記錄並通知管理員）
+  min-tps: 18.0
 
 debug:
   # 開啟 /zs debug 測試指令（正式環境請保持關閉）

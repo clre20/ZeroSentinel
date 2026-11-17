@@ -19,13 +19,17 @@ command:
 help:
   header: '&bZeroSentinel &7v{version} 指令說明'
   gui: '&f/{label} &7- 開啟管理介面'
-  record: '&f/{label} record <玩家> [秒數] &7- 存下最近的封包並繼續錄製'
-  record-stop: '&f/{label} record stop <玩家> &7- 提前停止錄製並存檔'
+  record: '&f/{label} record <玩家|all> [秒數] &7- 存下最近的封包並繼續錄製（all = 所有線上玩家）'
+  record-stop: '&f/{label} record stop <玩家|all> &7- 提前停止錄製並存檔'
   lookup: '&f/{label} lookup <錯誤碼> &7- 查詢錯誤碼對應的事件'
   verdict: '&f/{label} verdict <事件ID或錯誤碼> <legit|cheat> [備註] &7- 判定事件'
   debug: '&f/{label} debug flag <玩家> &7- 建立測試事件（需開啟 debug.enabled）'
+  debug-violation: '&f/{label} debug violation <玩家> &7- 模擬一次「客戶端回報異常」違規，走完整處罰流程（需開啟 debug.enabled）'
   reload: '&f/{label} reload &7- 重新載入設定'
   version: '&f/{label} version &7- 檢查更新'
+  versions: '&f/{label} versions &7- 統計線上玩家使用的版本'
+  trust: '&f/{label} trust &7- 查看自己的信用點數'
+  trust-admin: '&f/{label} trust <玩家> [set|add|take <數值> [原因]] &7- 查看或修改玩家的信用點數'
 
 record:
   started: '&a開始錄製 &f{player}&a：包含最近 {buffer} 秒，並持續 {seconds} 秒。'
@@ -34,6 +38,9 @@ record:
   not-recording: '&e{player} 目前沒有在錄製。'
   disabled: '&c錄製功能已在 config.yml 關閉。'
   not-tracked: '&c{player} 尚未被追蹤（請等對方重新進服）。'
+  capped: '&e要求的 {requested} 秒超過上限，已改為 {max} 秒（上限可在 config.yml 的 record.manual-max-seconds 調整，最高 3600）。'
+  all-started: '&a已對 &f{started} &a位玩家開始錄製：包含最近 {buffer} 秒，並持續 {seconds} 秒。&7（已在錄製中 {already} 位，尚未追蹤 {skipped} 位）'
+  all-stopped: '&a已停止 &f{count} &a位玩家的錄製並存檔。'
 
 lookup:
   searching: '&7查詢中…'
@@ -66,6 +73,7 @@ debug:
   flagged: '&a已對 &f{player} &a建立測試違規（{new}&a，第 {count} 次）。事件 &f{event}&a，錯誤碼 &f{code}'
   new: '&a新事件'
   merged: '&e併入既有事件'
+  violation: '&a已對 &f{player} &a模擬一次違規，結果：&f{outcome}&a，目前信用 &f{trust}'
 
 update:
   checking: '&7正在檢查更新…'
@@ -75,6 +83,44 @@ update:
   no-release: '&7GitHub 尚未發布任何 Release（目前 v{current}）。'
   failed: '&c檢查更新失敗，請稍後再試。'
   join-notify: '&eZeroSentinel 有新版本 &fv{latest}&e（目前 v{current}）：&f{url}'
+
+# 各項檢查（name 給管理員看；warn / kick 給玩家看，請用一般人看得懂的文字）
+checks:
+  client-report:
+    name: '客戶端回報異常'
+    warn: '&e你的遊戲沒有正常回報角色狀態，請改用正常的客戶端。&7（{count}/{max}，達到後會被踢出）&e錯誤碼：&f{code}'
+    kick: |-
+      &c你的遊戲沒有正常回報角色狀態，請改用正常的客戶端後再進入。
+      &f錯誤碼：&e{code}
+
+# 給有 zerosentinel.alerts 權限的管理員
+alerts:
+  violation: '&c[警告] &f{player} &7{check}（{count}/{max}）信用 &f{trust} &8{event}'
+  kicked: '&4[踢出] &f{player} &7{check}，信用 &f{trust} &8{event}'
+  kicked-repeat: '&4[踢出] &f{player} &7{check}（踢出後再犯），信用 &f{trust} &8{event}'
+  kicked-trust: '&4[踢出] &f{player} &7信用點數過低（{trust}） &8{event}'
+  join-denied: '&4[拒絕進服] &f{player} &7信用點數 {trust}，錯誤碼 &f{code}'
+  paused: '&6[暫停處罰] &f{player} &7{check}，伺服器 TPS {tps} 過低，只記錄不處罰 &8{event}'
+
+trust:
+  self: '&a你的信用點數：&f{trust} &7/ {max}'
+  view: '&f{player} &a的信用點數：&f{trust} &7/ {max} {status}'
+  status-ok: '&a（可正常進服）'
+  status-denied: '&c（目前無法進服）'
+  modified: '&a已將 &f{player} &a的信用點數改為 &f{trust}&a。'
+  changed-notify: '&e管理員已將你的信用點數調整為 &f{trust}&e。'
+  not-found: '&c找不到玩家 &f{player} &c的資料（從未進入過伺服器）。'
+  invalid-value: '&c&f{input} &c不是有效的數值（0～{max}）。'
+  login-denied: |-
+    &c你的信用點數：{trust} 過低，暫時無法進入伺服器。
+    &f請開客服單附上錯誤碼：&e{code} &f並說明無視警告原因，由管理員考慮恢復。
+
+versions:
+  header: '&b線上玩家 {total} 人：Java 版 {java} 人、基岩版 {bedrock} 人'
+  line: '&7- &f{version} &8(協議 {protocol})&7：&f{count} 人'
+  bedrock: '&7- &f基岩版&7：&f{count} 人'
+  bedrock-name: '基岩版'
+  unknown: '未知（協議 {protocol}）'
 
 gui:
   player-offline: '&c該玩家已離線。'
@@ -98,7 +144,8 @@ gui:
     info-name: '&f{player}'
     info-lore:
       - '&7UUID：&f{uuid}'
-      - '&7客戶端協議：&f{protocol}'
+      - '&7版本：&f{version} &8(協議 {protocol})'
+      - '&7信用點數：&f{trust}'
       - '&7基岩版：{bedrock}'
       - '&7錄製：{status}'
     status-recording: '&c錄製中（剩 {seconds} 秒）'

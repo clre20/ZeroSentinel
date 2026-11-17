@@ -4,6 +4,8 @@ import clre20.zeroSentinel.event.CodeRecord;
 import clre20.zeroSentinel.event.EventRecord;
 import clre20.zeroSentinel.event.MessageType;
 import clre20.zeroSentinel.event.Verdict;
+import clre20.zeroSentinel.trust.TrustLogEntry;
+import clre20.zeroSentinel.trust.TrustRecord;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,7 +47,7 @@ import java.util.logging.Logger;
  */
 public final class Database {
 
-    private static final int SCHEMA_VERSION = 1;
+    private static final int SCHEMA_VERSION = 2;
     private static final int CLEANUP_BATCH = 1000;
 
 
@@ -61,6 +63,10 @@ public final class Database {
     private final ConcurrentHashMap<Long, EventRecord> dirtyEvents = new ConcurrentHashMap<>();
     /** 待寫入的錯誤碼（每組都不同，只能逐筆寫） */
     private final ConcurrentLinkedQueue<CodeRecord> pendingCodes = new ConcurrentLinkedQueue<>();
+    /** 待寫入的信用點數（髒資料：同一玩家只保留最新一份） */
+    private final ConcurrentHashMap<UUID, TrustRecord> dirtyTrust = new ConcurrentHashMap<>();
+    /** 待寫入的管理員修改紀錄 */
+    private final ConcurrentLinkedQueue<TrustLogEntry> pendingTrustLogs = new ConcurrentLinkedQueue<>();
     private final AtomicInteger queued = new AtomicInteger();
     private final AtomicBoolean flushScheduled = new AtomicBoolean();
     private final ScheduledExecutorService writer;
@@ -147,6 +153,24 @@ public final class Database {
                     + "type TEXT NOT NULL) WITHOUT ROWID");
             st.execute("CREATE INDEX IF NOT EXISTS idx_codes_event ON codes(event_id)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_codes_created ON codes(created)");
+            st.execute("CREATE TABLE IF NOT EXISTS trust ("
+                    + "uuid TEXT PRIMARY KEY,"
+                    + "name TEXT,"
+                    + "score INTEGER NOT NULL,"
+                    + "daily_gain INTEGER NOT NULL,"
+                    + "gain_day INTEGER NOT NULL,"
+                    + "updated INTEGER NOT NULL) WITHOUT ROWID");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_trust_name ON trust(name COLLATE NOCASE)");
+            st.execute("CREATE TABLE IF NOT EXISTS trust_log ("
+                    + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + "uuid TEXT NOT NULL,"
+                    + "actor TEXT NOT NULL,"
+                    + "delta INTEGER NOT NULL,"
+                    + "score INTEGER NOT NULL,"
+                    + "reason TEXT,"
+                    + "time INTEGER NOT NULL)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_trust_log_uuid ON trust_log(uuid, time DESC)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_trust_log_time ON trust_log(time)");
             st.execute("PRAGMA user_version=" + SCHEMA_VERSION);
         }
     }
@@ -168,6 +192,25 @@ public final class Database {
             return;
         }
         pendingCodes.add(code);
+        queued.incrementAndGet();
+        maybeFlush();
+    }
+
+    public void upsertTrust(TrustRecord record) {
+        if (closed) {
+            return;
+        }
+        if (dirtyTrust.put(record.uuid(), record) == null) {
+            queued.incrementAndGet();
+        }
+        maybeFlush();
+    }
+
+    public void insertTrustLog(TrustLogEntry entry) {
+        if (closed) {
+            return;
+        }
+        pendingTrustLogs.add(entry);
         queued.incrementAndGet();
         maybeFlush();
     }
@@ -195,7 +238,8 @@ public final class Database {
 
     /** 只在寫入執行緒執行 */
     private void flush() {
-        if (writeConn == null || (dirtyEvents.isEmpty() && pendingCodes.isEmpty())) {
+        if (writeConn == null || (dirtyEvents.isEmpty() && pendingCodes.isEmpty()
+                && dirtyTrust.isEmpty() && pendingTrustLogs.isEmpty())) {
             return;
         }
         Map<Long, EventRecord> events = new LinkedHashMap<>();
@@ -210,7 +254,19 @@ public final class Database {
         while ((c0 = pendingCodes.poll()) != null) {
             codes.add(c0);
         }
-        int drained = events.size() + codes.size();
+        List<TrustRecord> trusts = new ArrayList<>();
+        for (UUID id : dirtyTrust.keySet()) {
+            TrustRecord t = dirtyTrust.remove(id);
+            if (t != null) {
+                trusts.add(t);
+            }
+        }
+        List<TrustLogEntry> logs = new ArrayList<>();
+        TrustLogEntry l0;
+        while ((l0 = pendingTrustLogs.poll()) != null) {
+            logs.add(l0);
+        }
+        int drained = events.size() + codes.size() + trusts.size() + logs.size();
         queued.addAndGet(-drained);
         try {
             writeConn.setAutoCommit(false);
@@ -259,6 +315,38 @@ public final class Database {
                     ps.executeBatch();
                 }
             }
+            if (!trusts.isEmpty()) {
+                try (PreparedStatement ps = writeConn.prepareStatement(
+                        "INSERT INTO trust(uuid, name, score, daily_gain, gain_day, updated) VALUES(?,?,?,?,?,?) "
+                                + "ON CONFLICT(uuid) DO UPDATE SET name=excluded.name, score=excluded.score, "
+                                + "daily_gain=excluded.daily_gain, gain_day=excluded.gain_day, updated=excluded.updated")) {
+                    for (TrustRecord t : trusts) {
+                        ps.setString(1, t.uuid().toString());
+                        ps.setString(2, t.name());
+                        ps.setInt(3, t.score());
+                        ps.setInt(4, t.dailyGain());
+                        ps.setLong(5, t.gainDay());
+                        ps.setLong(6, t.updated());
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+            }
+            if (!logs.isEmpty()) {
+                try (PreparedStatement ps = writeConn.prepareStatement(
+                        "INSERT INTO trust_log(uuid, actor, delta, score, reason, time) VALUES(?,?,?,?,?,?)")) {
+                    for (TrustLogEntry t : logs) {
+                        ps.setString(1, t.uuid().toString());
+                        ps.setString(2, t.actor());
+                        ps.setInt(3, t.delta());
+                        ps.setInt(4, t.score());
+                        ps.setString(5, t.reason());
+                        ps.setLong(6, t.time());
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+            }
             writeConn.commit();
         } catch (SQLException e) {
             logger.log(Level.WARNING, "批次寫入資料庫失敗（" + drained + " 筆）", e);
@@ -295,6 +383,8 @@ public final class Database {
                 total += deleteBatched("DELETE FROM codes WHERE code IN (SELECT code FROM codes WHERE created < ? LIMIT "
                         + CLEANUP_BATCH + ")", cutoffMillis);
                 total += deleteBatched("DELETE FROM events WHERE event_id IN (SELECT event_id FROM events WHERE created < ? LIMIT "
+                        + CLEANUP_BATCH + ")", cutoffMillis);
+                total += deleteBatched("DELETE FROM trust_log WHERE id IN (SELECT id FROM trust_log WHERE time < ? LIMIT "
                         + CLEANUP_BATCH + ")", cutoffMillis);
             } catch (SQLException e) {
                 logger.log(Level.WARNING, "清理過期資料失敗", e);
@@ -375,6 +465,47 @@ public final class Database {
             }
             return out;
         });
+    }
+
+    public CompletableFuture<Optional<TrustRecord>> findTrust(UUID uuid) {
+        return read(() -> {
+            try (PreparedStatement ps = readConn.prepareStatement("SELECT * FROM trust WHERE uuid=?")) {
+                ps.setString(1, uuid.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? Optional.of(readTrust(rs)) : Optional.<TrustRecord>empty();
+                }
+            }
+        });
+    }
+
+    /** 依名稱（不分大小寫）找最近更新的一筆 */
+    public CompletableFuture<Optional<TrustRecord>> findTrustByName(String name) {
+        return read(() -> {
+            try (PreparedStatement ps = readConn.prepareStatement(
+                    "SELECT * FROM trust WHERE name=? COLLATE NOCASE ORDER BY updated DESC LIMIT 1")) {
+                ps.setString(1, name);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? Optional.of(readTrust(rs)) : Optional.<TrustRecord>empty();
+                }
+            }
+        });
+    }
+
+    public CompletableFuture<Optional<EventRecord>> latestEvent(UUID uuid) {
+        return read(() -> {
+            try (PreparedStatement ps = readConn.prepareStatement(
+                    "SELECT * FROM events WHERE uuid=? ORDER BY created DESC LIMIT 1")) {
+                ps.setString(1, uuid.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? Optional.of(readEvent(rs)) : Optional.<EventRecord>empty();
+                }
+            }
+        });
+    }
+
+    private static TrustRecord readTrust(ResultSet rs) throws SQLException {
+        return new TrustRecord(UUID.fromString(rs.getString("uuid")), rs.getString("name"), rs.getInt("score"),
+                rs.getInt("daily_gain"), rs.getLong("gain_day"), rs.getLong("updated"));
     }
 
     private interface SqlSupplier<T> {
