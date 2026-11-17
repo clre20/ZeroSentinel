@@ -48,6 +48,8 @@ public final class EventManager {
     private final Map<OpenKey, Long> open = new ConcurrentHashMap<>();
     /** 線上玩家最近的事件 ID（新到舊），離線時清除 */
     private final Map<UUID, Deque<Long>> recent = new ConcurrentHashMap<>();
+    /** 每位玩家最後一個事件（離線後仍保留，進服被拒時用來產生錯誤碼） */
+    private final LruCache<UUID, Long> lastEvent = new LruCache<>(2000);
 
     public EventManager(Database database, int cacheSize, IntSupplier mergeWindowSeconds) {
         this.database = database;
@@ -85,6 +87,7 @@ public final class EventManager {
         events.put(id, created);
         eventCodes.put(id, List.of());
         open.put(key, id);
+        lastEvent.put(uuid, id);
         Deque<Long> list = recent.computeIfAbsent(uuid, u -> new ArrayDeque<>());
         synchronized (list) {
             list.addFirst(id);
@@ -238,6 +241,19 @@ public final class EventManager {
         });
     }
 
+    /** 玩家最後一個事件（快取 → 資料庫） */
+    public CompletableFuture<Optional<EventRecord>> latestEvent(UUID uuid) {
+        Long id = lastEvent.get(uuid);
+        if (id != null) {
+            EventRecord cached = events.get(id);
+            if (cached != null) {
+                return CompletableFuture.completedFuture(Optional.of(cached));
+            }
+            return findEvent(id);
+        }
+        return database.latestEvent(uuid);
+    }
+
     /** 玩家離線：關閉他所有進行中的事件、清除最近事件清單 */
     public void onQuit(UUID uuid) {
         open.keySet().removeIf(k -> k.uuid().equals(uuid));
@@ -256,6 +272,7 @@ public final class EventManager {
     public void clear() {
         open.clear();
         recent.clear();
+        lastEvent.clear();
         events.clear();
         codes.clear();
         eventCodes.clear();

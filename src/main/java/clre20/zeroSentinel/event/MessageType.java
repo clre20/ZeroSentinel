@@ -7,6 +7,7 @@ public enum MessageType {
     WARN,
     RESTRICT,
     KICK,
+    DENY_JOIN,
     TEMPBAN;
 
     public static MessageType parse(String s) {

@@ -34,6 +34,8 @@ import java.util.function.Consumer;
 public final class ZeroSentinelCommand implements TabExecutor {
 
     private static final int MAX_NOTE_LENGTH = 100;
+    /** /zs record all：所有線上玩家 */
+    private static final String ALL = "all";
     private static final List<String> SECONDS_SUGGESTIONS = List.of("30", "60", "120", "300");
 
     private final ZeroSentinel plugin;
@@ -98,6 +100,12 @@ public final class ZeroSentinelCommand implements TabExecutor {
                     debug(sender, label, args);
                 }
             }
+            case "versions" -> {
+                if (check(sender, Permissions.VERSIONS)) {
+                    versions(sender);
+                }
+            }
+            case "trust" -> trust(sender, label, args);
             default -> msg().send(sender, "command.unknown", "label", label);
         }
         return true;
@@ -128,6 +136,16 @@ public final class ZeroSentinelCommand implements TabExecutor {
         }
         if (sender.hasPermission(Permissions.DEBUG)) {
             msg().send(sender, "help.debug", "label", label);
+            msg().send(sender, "help.debug-violation", "label", label);
+        }
+        if (sender.hasPermission(Permissions.VERSIONS)) {
+            msg().send(sender, "help.versions", "label", label);
+        }
+        if (sender.hasPermission(Permissions.TRUST)) {
+            msg().send(sender, "help.trust", "label", label);
+        }
+        if (sender.hasPermission(Permissions.TRUST_ADMIN)) {
+            msg().send(sender, "help.trust-admin", "label", label);
         }
         if (sender.hasPermission(Permissions.RELOAD)) {
             msg().send(sender, "help.reload", "label", label);
@@ -158,6 +176,20 @@ public final class ZeroSentinelCommand implements TabExecutor {
 
     private void record(CommandSender sender, String label, String[] args) {
         if (args.length >= 3 && args[1].equalsIgnoreCase("stop")) {
+            if (args.length != 3) {
+                msg().send(sender, "help.record-stop", "label", label);
+                return;
+            }
+            if (args[2].equalsIgnoreCase(ALL)) {
+                int stopped = 0;
+                for (Player p : plugin.getServer().getOnlinePlayers()) {
+                    if (plugin.getRecordingManager().stop(p.getUniqueId())) {
+                        stopped++;
+                    }
+                }
+                msg().send(sender, "record.all-stopped", "count", String.valueOf(stopped));
+                return;
+            }
             Player target = findPlayer(sender, args[2]);
             if (target == null) {
                 return;
@@ -173,10 +205,6 @@ public final class ZeroSentinelCommand implements TabExecutor {
             msg().send(sender, "help.record", "label", label);
             return;
         }
-        Player target = findPlayer(sender, args[1]);
-        if (target == null) {
-            return;
-        }
         int max = plugin.getConfigManager().getManualMaxSeconds();
         int seconds = plugin.getConfigManager().getGuiRecordSeconds();
         if (args.length == 3) {
@@ -185,9 +213,42 @@ public final class ZeroSentinelCommand implements TabExecutor {
                 msg().send(sender, "command.invalid-number", "input", MessageManager.stripInput(cut(args[2], 16)));
                 return;
             }
+            if (parsed > max) {
+                msg().send(sender, "record.capped", "requested", String.valueOf(parsed), "max", String.valueOf(max));
+            }
             seconds = Math.min(parsed, max);
         }
+        if (args[1].equalsIgnoreCase(ALL)) {
+            recordAll(sender, seconds);
+            return;
+        }
+        Player target = findPlayer(sender, args[1]);
+        if (target == null) {
+            return;
+        }
         startRecording(sender, target, seconds);
+    }
+
+    /** 所有線上玩家同時開始錄製 */
+    private void recordAll(CommandSender sender, int seconds) {
+        int started = 0;
+        int already = 0;
+        int skipped = 0;
+        for (Player p : plugin.getServer().getOnlinePlayers()) {
+            switch (plugin.getRecordingManager().startManual(p.getUniqueId(), seconds)) {
+                case STARTED -> started++;
+                case ALREADY_RECORDING -> already++;
+                case DISABLED -> {
+                    msg().send(sender, "record.disabled");
+                    return;
+                }
+                case NOT_TRACKED -> skipped++;
+            }
+        }
+        msg().send(sender, "record.all-started", "started", String.valueOf(started),
+                "already", String.valueOf(already), "skipped", String.valueOf(skipped),
+                "seconds", String.valueOf(seconds),
+                "buffer", String.valueOf(plugin.getConfigManager().getBufferSeconds()));
     }
 
     /** 指令與箱子 UI 共用 */
@@ -327,12 +388,24 @@ public final class ZeroSentinelCommand implements TabExecutor {
             msg().send(sender, "debug.disabled");
             return;
         }
-        if (args.length != 3 || !args[1].equalsIgnoreCase("flag")) {
+        if (args.length != 3 || !(args[1].equalsIgnoreCase("flag") || args[1].equalsIgnoreCase("violation"))) {
             msg().send(sender, "help.debug", "label", label);
+            msg().send(sender, "help.debug-violation", "label", label);
             return;
         }
         Player target = findPlayer(sender, args[2]);
         if (target == null) {
+            return;
+        }
+        if (args[1].equalsIgnoreCase("violation")) {
+            clre20.zeroSentinel.check.PlayerData d = plugin.getPlayerDataManager().get(target.getUniqueId());
+            if (d == null) {
+                msg().send(sender, "record.not-tracked", "player", target.getName());
+                return;
+            }
+            var outcome = plugin.getClientReportCheck().violate(target, d, System.currentTimeMillis());
+            msg().send(sender, "debug.violation", "player", target.getName(), "outcome", outcome.name(),
+                    "trust", String.valueOf(plugin.getTrustManager().score(target.getUniqueId())));
             return;
         }
         EventManager.FlagResult flag = plugin.getEventManager().flag(target.getUniqueId(), target.getName(), "Debug");
@@ -345,6 +418,144 @@ public final class ZeroSentinelCommand implements TabExecutor {
                 "event", EventId.format(flag.event().id()), "code", code.display(),
                 "new", msg().raw(flag.isNew() ? "debug.new" : "debug.merged"),
                 "count", String.valueOf(flag.event().violations()));
+    }
+
+    // ---------------- versions ----------------
+
+    private void versions(CommandSender sender) {
+        java.util.TreeMap<Integer, Integer> javaCounts = new java.util.TreeMap<>(java.util.Comparator.reverseOrder());
+        int bedrock = 0;
+        int total = 0;
+        for (Player p : plugin.getServer().getOnlinePlayers()) {
+            total++;
+            clre20.zeroSentinel.check.PlayerData d = plugin.getPlayerDataManager().get(p.getUniqueId());
+            boolean be = d != null ? d.bedrock() : clre20.zeroSentinel.compatibility.FloodgateHook.isBedrock(p.getUniqueId());
+            if (be) {
+                bedrock++;
+                continue;
+            }
+            int protocol = d != null ? d.protocol() : clre20.zeroSentinel.util.Versions.protocol(p);
+            javaCounts.merge(protocol, 1, Integer::sum);
+        }
+        msg().send(sender, "versions.header", "total", String.valueOf(total),
+                "java", String.valueOf(total - bedrock), "bedrock", String.valueOf(bedrock));
+        for (var e : javaCounts.entrySet()) {
+            String name = clre20.zeroSentinel.util.Versions.name(e.getKey());
+            msg().send(sender, "versions.line", "version", name != null ? name : msg().raw("versions.unknown",
+                    "protocol", String.valueOf(e.getKey())), "protocol", String.valueOf(e.getKey()),
+                    "count", String.valueOf(e.getValue()));
+        }
+        if (bedrock > 0) {
+            msg().send(sender, "versions.bedrock", "count", String.valueOf(bedrock));
+        }
+    }
+
+    // ---------------- trust ----------------
+
+    /** 玩家名稱：Java 版 3～16 字元英數底線；基岩版（Floodgate）可能帶前綴，最長 32 字元 */
+    private static final java.util.regex.Pattern NAME = java.util.regex.Pattern.compile("[A-Za-z0-9_.\\-]{1,32}");
+
+    private void trust(CommandSender sender, String label, String[] args) {
+        if (args.length == 1) {
+            if (!(sender instanceof Player player)) {
+                msg().send(sender, "help.trust-admin", "label", label);
+                return;
+            }
+            if (!check(sender, Permissions.TRUST)) {
+                return;
+            }
+            msg().send(sender, "trust.self", "trust", String.valueOf(plugin.getTrustManager().score(player.getUniqueId())),
+                    "max", String.valueOf(plugin.getConfigManager().getTrustMax()));
+            return;
+        }
+        if (!check(sender, Permissions.TRUST_ADMIN)) {
+            return;
+        }
+        String targetName = args[1];
+        if (!NAME.matcher(targetName).matches()) {
+            msg().send(sender, "command.player-not-found", "player", MessageManager.stripInput(cut(targetName, 16)));
+            return;
+        }
+        clre20.zeroSentinel.trust.TrustManager.Operation op = null;
+        int value = 0;
+        String reason = null;
+        if (args.length >= 3) {
+            op = switch (args[2].toLowerCase(Locale.ROOT)) {
+                case "set" -> clre20.zeroSentinel.trust.TrustManager.Operation.SET;
+                case "add" -> clre20.zeroSentinel.trust.TrustManager.Operation.ADD;
+                case "take" -> clre20.zeroSentinel.trust.TrustManager.Operation.TAKE;
+                default -> null;
+            };
+            if (op == null || args.length < 4) {
+                msg().send(sender, "help.trust-admin", "label", label);
+                return;
+            }
+            Integer parsed = parseInt(args[3]);
+            if (parsed == null || parsed < 0 || parsed > plugin.getConfigManager().getTrustMax()) {
+                msg().send(sender, "trust.invalid-value", "input", MessageManager.stripInput(cut(args[3], 16)),
+                        "max", String.valueOf(plugin.getConfigManager().getTrustMax()));
+                return;
+            }
+            value = parsed;
+            if (args.length > 4) {
+                reason = MessageManager.stripInput(cut(String.join(" ",
+                        java.util.Arrays.copyOfRange(args, 4, args.length)), MAX_NOTE_LENGTH)).trim();
+                if (reason.isEmpty()) {
+                    reason = null;
+                }
+            }
+        }
+        final clre20.zeroSentinel.trust.TrustManager.Operation finalOp = op;
+        final int finalValue = value;
+        final String finalReason = reason;
+        final String actor = sender.getName();
+        UUID senderId = sender instanceof Player p ? p.getUniqueId() : null;
+
+        CompletableFuture<Optional<UUID>> idFuture;
+        Player online = plugin.getServer().getPlayerExact(targetName);
+        if (online != null) {
+            idFuture = CompletableFuture.completedFuture(Optional.of(online.getUniqueId()));
+        } else {
+            org.bukkit.OfflinePlayer cached = plugin.getServer().getOfflinePlayerIfCached(targetName);
+            if (cached != null) {
+                idFuture = CompletableFuture.completedFuture(Optional.of(cached.getUniqueId()));
+            } else {
+                idFuture = plugin.getTrustManager().findByName(targetName).thenApply(o -> o.map(r -> r.uuid()));
+            }
+        }
+        CompletableFuture<Optional<clre20.zeroSentinel.trust.TrustRecord>> result = idFuture.thenCompose(opt -> {
+            if (opt.isEmpty()) {
+                return CompletableFuture.completedFuture(Optional.empty());
+            }
+            if (finalOp == null) {
+                return plugin.getTrustManager().find(opt.get());
+            }
+            return plugin.getTrustManager().adminModify(opt.get(), targetName, finalOp, finalValue, actor, finalReason)
+                    .thenApply(Optional::of);
+        });
+        whenDone(result, opt -> {
+            CommandSender target = resolveSender(sender, senderId);
+            if (target == null) {
+                return;
+            }
+            if (opt.isEmpty()) {
+                msg().send(target, "trust.not-found", "player", targetName);
+                return;
+            }
+            var rec = opt.get();
+            String shownName = rec.name() != null ? rec.name() : targetName;
+            if (finalOp == null) {
+                msg().send(target, "trust.view", "player", shownName, "trust", String.valueOf(rec.score()),
+                        "max", String.valueOf(plugin.getConfigManager().getTrustMax()),
+                        "status", msg().raw(plugin.getTrustManager().isDenied(rec.score()) ? "trust.status-denied" : "trust.status-ok"));
+            } else {
+                msg().send(target, "trust.modified", "player", shownName, "trust", String.valueOf(rec.score()));
+                Player p = plugin.getServer().getPlayer(rec.uuid());
+                if (p != null) {
+                    msg().send(p, "trust.changed-notify", "trust", String.valueOf(rec.score()));
+                }
+            }
+        }, sender, senderId);
     }
 
     // ---------------- 工具 ----------------
@@ -416,6 +627,11 @@ public final class ZeroSentinelCommand implements TabExecutor {
             addIf(sender, out, Permissions.LOOKUP, "lookup");
             addIf(sender, out, Permissions.VERDICT, "verdict");
             addIf(sender, out, Permissions.DEBUG, "debug");
+            addIf(sender, out, Permissions.VERSIONS, "versions");
+            addIf(sender, out, Permissions.TRUST, "trust");
+            if (!out.contains("trust")) {
+                addIf(sender, out, Permissions.TRUST_ADMIN, "trust");
+            }
             return filter(out, args[0]);
         }
         String sub = args[0].toLowerCase(Locale.ROOT);
@@ -426,12 +642,15 @@ public final class ZeroSentinelCommand implements TabExecutor {
                 }
                 if (args.length == 2) {
                     out.add("stop");
+                    out.add(ALL);
                     out.addAll(playerNames());
                     return filter(out, args[1]);
                 }
                 if (args.length == 3) {
                     if (args[1].equalsIgnoreCase("stop")) {
-                        return filter(playerNames(), args[2]);
+                        List<String> names = playerNames();
+                        names.add(0, ALL);
+                        return filter(names, args[2]);
                     }
                     return filter(new ArrayList<>(SECONDS_SUGGESTIONS), args[2]);
                 }
@@ -446,10 +665,24 @@ public final class ZeroSentinelCommand implements TabExecutor {
                     return out;
                 }
                 if (args.length == 2) {
-                    return filter(new ArrayList<>(List.of("flag")), args[1]);
+                    return filter(new ArrayList<>(List.of("flag", "violation")), args[1]);
                 }
-                if (args.length == 3 && args[1].equalsIgnoreCase("flag")) {
+                if (args.length == 3 && (args[1].equalsIgnoreCase("flag") || args[1].equalsIgnoreCase("violation"))) {
                     return filter(playerNames(), args[2]);
+                }
+            }
+            case "trust" -> {
+                if (!sender.hasPermission(Permissions.TRUST_ADMIN)) {
+                    return out;
+                }
+                if (args.length == 2) {
+                    return filter(playerNames(), args[1]);
+                }
+                if (args.length == 3) {
+                    return filter(new ArrayList<>(List.of("set", "add", "take")), args[2]);
+                }
+                if (args.length == 4) {
+                    return filter(new ArrayList<>(List.of("0", "100", "500")), args[3]);
                 }
             }
             default -> {

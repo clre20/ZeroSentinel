@@ -1,5 +1,8 @@
 package clre20.zeroSentinel;
 
+import clre20.zeroSentinel.check.CheckPacketListener;
+import clre20.zeroSentinel.check.ClientReportCheck;
+import clre20.zeroSentinel.check.PlayerDataManager;
 import clre20.zeroSentinel.command.ZeroSentinelCommand;
 import clre20.zeroSentinel.compatibility.FloodgateHook;
 import clre20.zeroSentinel.config.ConfigManager;
@@ -7,6 +10,13 @@ import clre20.zeroSentinel.config.MessageManager;
 import clre20.zeroSentinel.event.EventManager;
 import clre20.zeroSentinel.gui.GuiListener;
 import clre20.zeroSentinel.gui.GuiManager;
+import clre20.zeroSentinel.lag.LagMonitor;
+import clre20.zeroSentinel.punish.PunishmentManager;
+import clre20.zeroSentinel.trust.TrustManager;
+import clre20.zeroSentinel.util.Versions;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListenerCommon;
+import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import clre20.zeroSentinel.listener.PlayerListener;
 import clre20.zeroSentinel.record.RecordingManager;
 import clre20.zeroSentinel.record.RecordingSession;
@@ -35,6 +45,13 @@ public final class ZeroSentinel extends JavaPlugin {
     private GuiManager guiManager;
     private BukkitTask tickTask;
     private BukkitTask cleanupTask;
+    private BukkitTask minuteTask;
+    private PlayerDataManager playerDataManager;
+    private TrustManager trustManager;
+    private PunishmentManager punishmentManager;
+    private LagMonitor lagMonitor;
+    private ClientReportCheck clientReportCheck;
+    private PacketListenerCommon checkListener;
 
     @Override
     public void onEnable() {
@@ -59,11 +76,30 @@ public final class ZeroSentinel extends JavaPlugin {
         eventManager = new EventManager(database, configManager.getDbCacheSize(),
                 () -> configManager.getMergeWindowSeconds());
 
+        trustManager = new TrustManager(database, configManager, getLogger());
+        punishmentManager = new PunishmentManager(this);
+        playerDataManager = new PlayerDataManager();
+        lagMonitor = new LagMonitor(getLogger(), () -> configManager.getLagStallThresholdMs(),
+                () -> configManager.getLagGraceSeconds() * 1000L);
+        lagMonitor.start();
+        clientReportCheck = new ClientReportCheck(this, playerDataManager);
+
         recordingManager = new RecordingManager(this, configManager,
                 getDataFolder().toPath().resolve("recordings"), this::onRecordingFinished);
         recordingManager.start();
 
         guiManager = new GuiManager(this);
+
+        checkListener = PacketEvents.getAPI().getEventManager().registerListener(
+                new CheckPacketListener(playerDataManager), PacketListenerPriority.LOWEST);
+        // 插件重載時已在線上的玩家
+        for (org.bukkit.entity.Player p : getServer().getOnlinePlayers()) {
+            playerDataManager.put(new clre20.zeroSentinel.check.PlayerData(p.getUniqueId(), p.getName(),
+                    FloodgateHook.isBedrock(p.getUniqueId()), Versions.protocol(p), System.nanoTime(),
+                    configManager.getJoinGraceSeconds() * 1_000_000_000L));
+            trustManager.load(p.getUniqueId(), p.getName());
+            trustManager.onJoin(p.getUniqueId());
+        }
 
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(new GuiListener(this), this);
@@ -82,7 +118,13 @@ public final class ZeroSentinel extends JavaPlugin {
         tickTask = getServer().getScheduler().runTaskTimer(this, () -> {
             recordingManager.tick();
             eventManager.expireOpen();
+            clientReportCheck.tick();
         }, 20L, 20L);
+        // 每分鐘：在線加分、清除過期的「最近踢出」紀錄
+        minuteTask = getServer().getScheduler().runTaskTimer(this, () -> {
+            trustManager.tickGain();
+            punishmentManager.prune(configManager.getClientReportRepeatKickMinutes());
+        }, 20L * 60, 20L * 60);
         // 啟動 1 分鐘後清理一次資料庫過期資料，之後每天一次（實際刪除在資料庫寫入執行緒）
         cleanupTask = getServer().getScheduler().runTaskTimer(this, this::cleanupDatabase, 20L * 60, DAY_TICKS);
 
@@ -100,6 +142,15 @@ public final class ZeroSentinel extends JavaPlugin {
         if (cleanupTask != null) {
             cleanupTask.cancel();
         }
+        if (minuteTask != null) {
+            minuteTask.cancel();
+        }
+        if (checkListener != null) {
+            PacketEvents.getAPI().getEventManager().unregisterListener(checkListener);
+        }
+        if (lagMonitor != null) {
+            lagMonitor.stop();
+        }
         if (guiManager != null) {
             guiManager.closeAll();
         }
@@ -114,6 +165,15 @@ public final class ZeroSentinel extends JavaPlugin {
         }
         if (eventManager != null) {
             eventManager.clear();
+        }
+        if (trustManager != null) {
+            trustManager.clear();
+        }
+        if (playerDataManager != null) {
+            playerDataManager.clear();
+        }
+        if (punishmentManager != null) {
+            punishmentManager.clear();
         }
     }
 
@@ -178,5 +238,25 @@ public final class ZeroSentinel extends JavaPlugin {
 
     public GuiManager getGuiManager() {
         return guiManager;
+    }
+
+    public PlayerDataManager getPlayerDataManager() {
+        return playerDataManager;
+    }
+
+    public TrustManager getTrustManager() {
+        return trustManager;
+    }
+
+    public PunishmentManager getPunishmentManager() {
+        return punishmentManager;
+    }
+
+    public ClientReportCheck getClientReportCheck() {
+        return clientReportCheck;
+    }
+
+    public LagMonitor getLagMonitor() {
+        return lagMonitor;
     }
 }

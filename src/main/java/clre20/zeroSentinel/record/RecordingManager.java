@@ -184,6 +184,11 @@ public final class RecordingManager {
         }
         int readerIndex = ByteBufHelper.readerIndex(buf);
         int size = ByteBufHelper.readableBytes(buf);
+        // 其他實體的速度與判定無關（只佔空間）：只記錄玩家自己被擊退的那幾筆
+        if (type == PacketType.Play.Server.ENTITY_VELOCITY
+                && peekVarInt(buf, readerIndex, size) != user.getEntityId()) {
+            return;
+        }
         boolean truncated = size > config.getMaxPacketBytes();
         BufSource source = SOURCES.get();
         source.buf = buf;
@@ -196,6 +201,19 @@ public final class RecordingManager {
             ByteBufHelper.readerIndex(buf, readerIndex);
             source.buf = null;
         }
+    }
+
+    /** 讀取封包開頭的 varint（不移動讀取位置）；格式錯誤時回傳 Integer.MIN_VALUE */
+    private static int peekVarInt(Object buf, int index, int readable) {
+        int value = 0;
+        for (int i = 0; i < 5 && i < readable; i++) {
+            int b = ByteBufHelper.getUnsignedByte(buf, index + i);
+            value |= (b & 0x7F) << (7 * i);
+            if ((b & 0x80) == 0) {
+                return value;
+            }
+        }
+        return Integer.MIN_VALUE;
     }
 
     /** 主執行緒：玩家進服時開始追蹤 */

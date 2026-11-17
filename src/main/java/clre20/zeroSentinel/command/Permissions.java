@@ -12,6 +12,12 @@ public final class Permissions {
     public static final String LOOKUP = "zerosentinel.lookup";
     public static final String VERDICT = "zerosentinel.verdict";
     public static final String DEBUG = "zerosentinel.debug";
+    public static final String ALERTS = "zerosentinel.alerts";
+    public static final String VERSIONS = "zerosentinel.versions";
+    /** 查看自己的信用點數（預設所有人） */
+    public static final String TRUST = "zerosentinel.trust";
+    /** 查看與修改他人的信用點數 */
+    public static final String TRUST_ADMIN = "zerosentinel.trust.admin";
 
     private Permissions() {
     }
