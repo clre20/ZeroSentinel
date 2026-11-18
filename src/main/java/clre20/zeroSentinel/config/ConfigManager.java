@@ -54,6 +54,8 @@ public final class ConfigManager {
     private volatile int clientReportTrustPerKick = 30;
     private volatile int clientReportRemoveAfterSeconds = 60;
     private volatile boolean clientReportCheckBedrock = false;
+    private volatile boolean clientFrozenEnabled = true;
+    private volatile int clientFrozenKickSeconds = 60;
 
     // 信用點數
     private volatile int trustStart = 500;
@@ -124,6 +126,8 @@ public final class ConfigManager {
         clientReportTrustPerKick = clamp(cfg.getInt("checks.client-report.trust-per-kick", 30), 0, 1000);
         clientReportRemoveAfterSeconds = clamp(cfg.getInt("checks.client-report.remove-violations-after", 60), 1, 86400);
         clientReportCheckBedrock = cfg.getBoolean("checks.client-report.check-bedrock", false);
+        clientFrozenEnabled = cfg.getBoolean("checks.client-frozen.enabled", true);
+        clientFrozenKickSeconds = clamp(cfg.getInt("checks.client-frozen.kick-after-seconds", 60), 10, 3600);
 
         trustMax = clamp(cfg.getInt("trust.max", 1000), 1, 1_000_000);
         trustStart = clamp(cfg.getInt("trust.start", 500), 0, trustMax);
@@ -248,6 +252,8 @@ public final class ConfigManager {
     public int getClientReportTrustPerKick() { return clientReportTrustPerKick; }
     public int getClientReportRemoveAfterSeconds() { return clientReportRemoveAfterSeconds; }
     public boolean isClientReportCheckBedrock() { return clientReportCheckBedrock; }
+    public boolean isClientFrozenEnabled() { return clientFrozenEnabled; }
+    public int getClientFrozenKickSeconds() { return clientFrozenKickSeconds; }
     public int getTrustStart() { return trustStart; }
     public int getTrustMax() { return trustMax; }
     public int getTrustDenyJoinAt() { return trustDenyJoinAt; }

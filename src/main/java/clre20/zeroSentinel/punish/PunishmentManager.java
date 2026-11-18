@@ -77,7 +77,9 @@ public final class PunishmentManager {
             return Outcome.PAUSED_LOW_TPS;
         }
 
+        int before = trust.score(uuid);
         int score = trust.adjust(uuid, player.getName(), -perViolation);
+        events.addTrustDeducted(flag.event().id(), before - score);
         int threshold = trust.threshold(baseKick, score);
         long now = System.currentTimeMillis();
         String kickKey = uuid + ":" + check;
@@ -93,7 +95,9 @@ public final class PunishmentManager {
         }
 
         if (repeat || count >= threshold) {
+            int beforeKick = score;
             score = trust.adjust(uuid, player.getName(), -perKick);
+            events.addTrustDeducted(flag.event().id(), beforeKick - score);
             CodeRecord code = events.issueCode(flag.event(), MessageType.KICK);
             lastKick.put(kickKey, now);
             if (trust.isDenied(score)) {
@@ -114,6 +118,23 @@ public final class PunishmentManager {
                 "count", String.valueOf(count), "max", String.valueOf(threshold), "trust", String.valueOf(score),
                 "event", eventText);
         return Outcome.WARNED;
+    }
+
+    /**
+     * 客戶端卡住（只剩網路層封包、沒有任何玩家操作）：不扣信用、不警告，直接以白話訊息踢出並附錯誤碼。
+     * 不算入「踢出後再犯」。
+     */
+    public void frozenKick(Player player, long silentSeconds) {
+        EventManager events = plugin.getEventManager();
+        EventManager.FlagResult flag = events.flag(player.getUniqueId(), player.getName(), "ClientFrozen");
+        if (flag.isNew()) {
+            plugin.getRecordingManager().startForEvent(player.getUniqueId(), flag.event().id());
+        }
+        CodeRecord code = events.issueCode(flag.event(), MessageType.KICK);
+        player.kick(msg().component("checks.client-frozen.kick", "code", code.display(),
+                "seconds", String.valueOf(silentSeconds)));
+        alert("alerts.frozen", "player", player.getName(), "seconds", String.valueOf(silentSeconds),
+                "event", EventId.format(flag.event().id()));
     }
 
     /** 通知有 zerosentinel.alerts 權限的線上管理員，並寫入後台 */

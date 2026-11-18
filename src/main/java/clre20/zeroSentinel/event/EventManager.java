@@ -83,7 +83,7 @@ public final class EventManager {
         }
         long id = EventId.next();
         EventRecord created = new EventRecord(id, uuid, playerName, category, now, now, 1,
-                Verdict.NONE, null, null, 0, null);
+                Verdict.NONE, null, null, 0, null, 0);
         events.put(id, created);
         eventCodes.put(id, List.of());
         open.put(key, id);
@@ -198,6 +198,90 @@ public final class EventManager {
             }
             database.upsertEvent(updated);
             return Optional.of(updated);
+        });
+    }
+
+    /** 累加這個事件扣掉的信用點數（主執行緒，事件一定在快取中） */
+    public void addTrustDeducted(long eventId, int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        EventRecord updated;
+        synchronized (this) {
+            EventRecord base = events.get(eventId);
+            if (base == null) {
+                return;
+            }
+            updated = base.withTrustDeducted(base.trustDeducted() + amount);
+            events.put(eventId, updated);
+        }
+        database.upsertEvent(updated);
+    }
+
+    /**
+     * 設定判定；判定為合法時把這個事件扣掉的分數歸零並回傳應退還的分數。
+     *
+     * @return 更新後的事件與應退還的分數；找不到事件時為 empty
+     */
+    public CompletableFuture<Optional<VerdictResult>> judge(long eventId, Verdict verdict, String by, String note) {
+        return findEvent(eventId).thenApply(opt -> {
+            if (opt.isEmpty()) {
+                return Optional.<VerdictResult>empty();
+            }
+            EventRecord updated;
+            int refund = 0;
+            synchronized (this) {
+                EventRecord base = events.get(eventId);
+                if (base == null) {
+                    base = opt.get();
+                }
+                updated = base.withVerdict(verdict, by, note, System.currentTimeMillis());
+                if (verdict == Verdict.LEGIT && base.trustDeducted() > 0) {
+                    refund = base.trustDeducted();
+                    updated = updated.withTrustDeducted(0);
+                }
+                events.put(eventId, updated);
+            }
+            database.upsertEvent(updated);
+            return Optional.of(new VerdictResult(updated, refund));
+        });
+    }
+
+    public record VerdictResult(EventRecord event, int refund) {
+    }
+
+    /** 某位玩家尚未判定的事件（資料庫＋快取中尚未寫入的） */
+    public CompletableFuture<List<EventRecord>> unjudgedEvents(UUID uuid) {
+        return database.unjudgedEvents(uuid, 500).thenApply(fromDb -> {
+            Map<Long, EventRecord> merged = new LinkedHashMap<>();
+            for (EventRecord e : fromDb) {
+                EventRecord cached = events.get(e.id());
+                merged.put(e.id(), cached != null ? cached : e);
+            }
+            Long last = lastEvent.get(uuid);
+            Deque<Long> ids = recent.get(uuid);
+            List<Long> extra = new ArrayList<>();
+            if (ids != null) {
+                synchronized (ids) {
+                    extra.addAll(ids);
+                }
+            }
+            if (last != null) {
+                extra.add(last);
+            }
+            for (Long id : extra) {
+                EventRecord cached = events.get(id);
+                if (cached != null) {
+                    merged.put(id, cached);
+                }
+            }
+            List<EventRecord> out = new ArrayList<>();
+            for (EventRecord e : merged.values()) {
+                if (e.verdict() == null || e.verdict() == Verdict.NONE) {
+                    out.add(e);
+                }
+            }
+            return out;
         });
     }
 

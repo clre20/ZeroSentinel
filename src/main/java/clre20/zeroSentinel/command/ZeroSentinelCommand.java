@@ -133,6 +133,7 @@ public final class ZeroSentinelCommand implements TabExecutor {
         }
         if (sender.hasPermission(Permissions.VERDICT)) {
             msg().send(sender, "help.verdict", "label", label);
+            msg().send(sender, "help.verdict-player", "label", label);
         }
         if (sender.hasPermission(Permissions.DEBUG)) {
             msg().send(sender, "help.debug", "label", label);
@@ -330,18 +331,22 @@ public final class ZeroSentinelCommand implements TabExecutor {
     // ---------------- verdict ----------------
 
     private void verdict(CommandSender sender, String label, String[] args) {
-        if (args.length < 3) {
+        boolean bulk = args.length >= 2 && args[1].equalsIgnoreCase("player");
+        int vIndex = bulk ? 3 : 2;
+        if (args.length < vIndex + 1) {
             msg().send(sender, "help.verdict", "label", label);
+            msg().send(sender, "help.verdict-player", "label", label);
             return;
         }
-        Verdict verdict = Verdict.parseInput(args[2]);
+        Verdict verdict = Verdict.parseInput(args[vIndex]);
         if (verdict == null) {
             msg().send(sender, "help.verdict", "label", label);
+            msg().send(sender, "help.verdict-player", "label", label);
             return;
         }
         String note = null;
-        if (args.length > 3) {
-            note = MessageManager.stripInput(cut(String.join(" ", java.util.Arrays.copyOfRange(args, 3, args.length)),
+        if (args.length > vIndex + 1) {
+            note = MessageManager.stripInput(cut(String.join(" ", java.util.Arrays.copyOfRange(args, vIndex + 1, args.length)),
                     MAX_NOTE_LENGTH)).trim();
             if (note.isEmpty()) {
                 note = null;
@@ -350,6 +355,40 @@ public final class ZeroSentinelCommand implements TabExecutor {
         String by = sender.getName();
         final String finalNote = note;
         UUID senderId = sender instanceof Player p ? p.getUniqueId() : null;
+        var service = plugin.getVerdictService();
+
+        if (bulk) {
+            String targetName = args[2];
+            if (!NAME.matcher(targetName).matches()) {
+                msg().send(sender, "command.player-not-found", "player", MessageManager.stripInput(cut(targetName, 16)));
+                return;
+            }
+            CompletableFuture<Optional<clre20.zeroSentinel.punish.VerdictService.Bulk>> result =
+                    resolvePlayer(targetName).thenCompose(opt -> opt.isEmpty()
+                            ? CompletableFuture.completedFuture(Optional.empty())
+                            : service.judgeAll(opt.get(), targetName, verdict, by, finalNote).thenApply(Optional::of));
+            whenDone(result, opt -> {
+                CommandSender target = resolveSender(sender, senderId);
+                if (target == null) {
+                    return;
+                }
+                if (opt.isEmpty()) {
+                    msg().send(target, "trust.not-found", "player", targetName);
+                    return;
+                }
+                var r = opt.get();
+                if (r.count() == 0) {
+                    msg().send(target, "verdict.bulk-none", "player", r.playerName());
+                    return;
+                }
+                msg().send(target, "verdict.bulk-done", "player", r.playerName(), "count", String.valueOf(r.count()),
+                        "verdict", EventFormat.verdict(msg(), verdict));
+                if (r.refund() > 0) {
+                    msg().send(target, "verdict.refunded", "player", r.playerName(), "refund", String.valueOf(r.refund()));
+                }
+            }, sender, senderId);
+            return;
+        }
 
         CompletableFuture<Optional<Long>> idFuture;
         Long directId = EventId.parse(args[1]);
@@ -364,9 +403,10 @@ public final class ZeroSentinelCommand implements TabExecutor {
             idFuture = plugin.getEventManager().lookupCode(code)
                     .thenApply(opt -> opt.map(l -> l.event().id()));
         }
-        CompletableFuture<Optional<EventRecord>> result = idFuture.thenCompose(opt -> opt.isEmpty()
-                ? CompletableFuture.completedFuture(Optional.<EventRecord>empty())
-                : plugin.getEventManager().verdict(opt.get(), verdict, by, finalNote));
+        CompletableFuture<Optional<clre20.zeroSentinel.punish.VerdictService.Single>> result =
+                idFuture.thenCompose(opt -> opt.isEmpty()
+                        ? CompletableFuture.completedFuture(Optional.empty())
+                        : service.judge(opt.get(), verdict, by, finalNote));
         whenDone(result, opt -> {
             CommandSender target = resolveSender(sender, senderId);
             if (target == null) {
@@ -376,9 +416,27 @@ public final class ZeroSentinelCommand implements TabExecutor {
                 msg().send(target, "verdict.not-found");
                 return;
             }
-            msg().send(target, "verdict.done", "event", EventId.format(opt.get().id()),
+            var r = opt.get();
+            msg().send(target, "verdict.done", "event", EventId.format(r.event().id()),
                     "verdict", EventFormat.verdict(msg(), verdict));
+            if (r.refund() > 0) {
+                msg().send(target, "verdict.refunded", "player", String.valueOf(r.event().playerName()),
+                        "refund", String.valueOf(r.refund()));
+            }
         }, sender, senderId);
+    }
+
+    /** 玩家名稱 → UUID：線上玩家 → 伺服器快取 → 信用點數資料庫（不發網路請求） */
+    private CompletableFuture<Optional<UUID>> resolvePlayer(String name) {
+        Player online = plugin.getServer().getPlayerExact(name);
+        if (online != null) {
+            return CompletableFuture.completedFuture(Optional.of(online.getUniqueId()));
+        }
+        org.bukkit.OfflinePlayer cached = plugin.getServer().getOfflinePlayerIfCached(name);
+        if (cached != null) {
+            return CompletableFuture.completedFuture(Optional.of(cached.getUniqueId()));
+        }
+        return plugin.getTrustManager().findByName(name).thenApply(o -> o.map(r -> r.uuid()));
     }
 
     // ---------------- debug ----------------
@@ -511,18 +569,7 @@ public final class ZeroSentinelCommand implements TabExecutor {
         final String actor = sender.getName();
         UUID senderId = sender instanceof Player p ? p.getUniqueId() : null;
 
-        CompletableFuture<Optional<UUID>> idFuture;
-        Player online = plugin.getServer().getPlayerExact(targetName);
-        if (online != null) {
-            idFuture = CompletableFuture.completedFuture(Optional.of(online.getUniqueId()));
-        } else {
-            org.bukkit.OfflinePlayer cached = plugin.getServer().getOfflinePlayerIfCached(targetName);
-            if (cached != null) {
-                idFuture = CompletableFuture.completedFuture(Optional.of(cached.getUniqueId()));
-            } else {
-                idFuture = plugin.getTrustManager().findByName(targetName).thenApply(o -> o.map(r -> r.uuid()));
-            }
-        }
+        CompletableFuture<Optional<UUID>> idFuture = resolvePlayer(targetName);
         CompletableFuture<Optional<clre20.zeroSentinel.trust.TrustRecord>> result = idFuture.thenCompose(opt -> {
             if (opt.isEmpty()) {
                 return CompletableFuture.completedFuture(Optional.empty());
@@ -656,8 +703,18 @@ public final class ZeroSentinelCommand implements TabExecutor {
                 }
             }
             case "verdict" -> {
-                if (sender.hasPermission(Permissions.VERDICT) && args.length == 3) {
-                    return filter(new ArrayList<>(List.of("legit", "cheat")), args[2]);
+                if (!sender.hasPermission(Permissions.VERDICT)) {
+                    return out;
+                }
+                if (args.length == 2) {
+                    return filter(new ArrayList<>(List.of("player")), args[1]);
+                }
+                boolean bulk = args[1].equalsIgnoreCase("player");
+                if (bulk && args.length == 3) {
+                    return filter(playerNames(), args[2]);
+                }
+                if ((!bulk && args.length == 3) || (bulk && args.length == 4)) {
+                    return filter(new ArrayList<>(List.of("legit", "cheat")), args[args.length - 1]);
                 }
             }
             case "debug" -> {

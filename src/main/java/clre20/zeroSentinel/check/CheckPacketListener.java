@@ -18,7 +18,7 @@ import java.util.UUID;
 public final class CheckPacketListener implements PacketListener {
 
     /** 移動與 tick 結束類：正常客戶端每秒至少會送 1 個 */
-    private static final Set<PacketType.Play.Client> MOVEMENT = EnumSet.of(
+    static final Set<PacketType.Play.Client> MOVEMENT = EnumSet.of(
             PacketType.Play.Client.CLIENT_TICK_END,
             PacketType.Play.Client.PLAYER_POSITION,
             PacketType.Play.Client.PLAYER_POSITION_AND_ROTATION,
@@ -26,6 +26,40 @@ public final class CheckPacketListener implements PacketListener {
             PacketType.Play.Client.PLAYER_FLYING,
             PacketType.Play.Client.VEHICLE_MOVE,
             PacketType.Play.Client.STEER_BOAT
+    );
+
+    /**
+     * 需要遊戲主程式才會送出的封包（玩家的操作）。客戶端卡住時只剩網路層的 keep-alive / PONG 等，送不出這些。
+     * 不包含進服時自動送出的封包（設定、載入完成、資源包回應、區塊確認、插件訊息等）。
+     */
+    static final Set<PacketType.Play.Client> ACTIVE = EnumSet.of(
+            PacketType.Play.Client.CHAT_MESSAGE,
+            PacketType.Play.Client.CHAT_COMMAND,
+            PacketType.Play.Client.CHAT_COMMAND_UNSIGNED,
+            PacketType.Play.Client.TAB_COMPLETE,
+            PacketType.Play.Client.CLICK_WINDOW,
+            PacketType.Play.Client.CLICK_WINDOW_BUTTON,
+            PacketType.Play.Client.CLOSE_WINDOW,
+            PacketType.Play.Client.CREATIVE_INVENTORY_ACTION,
+            PacketType.Play.Client.INTERACT_ENTITY,
+            PacketType.Play.Client.ATTACK,
+            PacketType.Play.Client.PUNCH,
+            PacketType.Play.Client.ANIMATION,
+            PacketType.Play.Client.PLAYER_DIGGING,
+            PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT,
+            PacketType.Play.Client.USE_ITEM,
+            PacketType.Play.Client.HELD_ITEM_CHANGE,
+            PacketType.Play.Client.ENTITY_ACTION,
+            PacketType.Play.Client.PLAYER_INPUT,
+            PacketType.Play.Client.PLAYER_ABILITIES,
+            PacketType.Play.Client.PICK_ITEM,
+            PacketType.Play.Client.PICK_ITEM_FROM_BLOCK,
+            PacketType.Play.Client.PICK_ITEM_FROM_ENTITY,
+            PacketType.Play.Client.NAME_ITEM,
+            PacketType.Play.Client.SELECT_TRADE,
+            PacketType.Play.Client.EDIT_BOOK,
+            PacketType.Play.Client.UPDATE_SIGN,
+            PacketType.Play.Client.SELECT_BUNDLE_ITEM
     );
 
     private final PlayerDataManager players;
@@ -52,6 +86,7 @@ public final class CheckPacketListener implements PacketListener {
         if (data == null) {
             return;
         }
-        data.onPacket(System.nanoTime(), MOVEMENT.contains(client), client == PacketType.Play.Client.PLAYER_LOADED);
+        data.onPacket(System.nanoTime(), MOVEMENT.contains(client), client == PacketType.Play.Client.PLAYER_LOADED,
+                ACTIVE.contains(client));
     }
 }

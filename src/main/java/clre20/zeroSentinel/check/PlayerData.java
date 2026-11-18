@@ -22,13 +22,19 @@ public final class PlayerData {
     volatile long lastMoveNanos;
     /** 最後一次收到任何封包的時間 */
     volatile long lastAnyNanos;
+    /** 最後一次收到「需要遊戲主程式」的封包（聊天、指令、點擊、攻擊…）的時間；卡住的客戶端送不出這類封包 */
+    volatile long lastActiveNanos = Long.MIN_VALUE / 2;
     /** 這個時間之前不檢查（進服、切換世界、重生） */
     volatile long exemptUntilNanos;
     /** 客戶端已回報載入完成（1.21.4 起的 PLAYER_LOADED，或已送過移動封包） */
     volatile boolean loaded;
+    /** 這次連線是否送過任何移動 / tick 結束類封包 */
+    volatile boolean movedOnce;
 
     // ---- 主執行緒 ----
     int clientReportVl;
+    /** 已因客戶端無回應被踢出（避免同一次連線重複處理） */
+    boolean frozenKicked;
     long clientReportLastFlagNanos = Long.MIN_VALUE / 2;
     long clientReportLastViolationMillis;
 
@@ -79,12 +85,25 @@ public final class PlayerData {
         exemptUntilNanos = Math.max(exemptUntilNanos, nowNanos + graceNanos);
     }
 
+    public long lastActiveNanos() {
+        return lastActiveNanos;
+    }
+
     /** 封包更新（netty 執行緒） */
     void onPacket(long nowNanos, boolean movement, boolean loadedPacket) {
+        onPacket(nowNanos, movement, loadedPacket, false);
+    }
+
+    /** 封包更新（netty 執行緒） */
+    void onPacket(long nowNanos, boolean movement, boolean loadedPacket, boolean active) {
         lastAnyNanos = nowNanos;
+        if (active) {
+            lastActiveNanos = nowNanos;
+        }
         if (movement) {
             lastMoveNanos = nowNanos;
             loaded = true;
+            movedOnce = true;
         }
         if (loadedPacket) {
             loaded = true;
