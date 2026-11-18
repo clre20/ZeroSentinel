@@ -321,7 +321,7 @@ public final class GuiManager {
             Verdict verdict = slot == SLOT_LEGIT ? Verdict.LEGIT : Verdict.CHEAT;
             UUID viewerId = viewer.getUniqueId();
             long eventId = holder.getEventId();
-            plugin.getEventManager().verdict(eventId, verdict, viewer.getName(), null)
+            plugin.getVerdictService().judge(eventId, verdict, viewer.getName(), null)
                     .whenComplete((opt, error) -> Sync.run(plugin, () -> {
                         holder.setBusy(false);
                         Player v = plugin.getServer().getPlayer(viewerId);
@@ -338,6 +338,10 @@ public final class GuiManager {
                         }
                         msg().send(v, "verdict.done", "event", EventId.format(eventId),
                                 "verdict", EventFormat.verdict(msg(), verdict));
+                        if (opt.get().refund() > 0) {
+                            msg().send(v, "verdict.refunded", "player", String.valueOf(opt.get().event().playerName()),
+                                    "refund", String.valueOf(opt.get().refund()));
+                        }
                         if (isOpen(v, holder)) {
                             openEvent(v, eventId, holder.getTarget(), holder.getTargetName());
                         }

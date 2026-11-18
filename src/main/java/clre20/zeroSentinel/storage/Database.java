@@ -47,7 +47,7 @@ import java.util.logging.Logger;
  */
 public final class Database {
 
-    private static final int SCHEMA_VERSION = 2;
+    private static final int SCHEMA_VERSION = 3;
     private static final int CLEANUP_BATCH = 1000;
 
 
@@ -144,6 +144,18 @@ public final class Database {
                     + "verdict_at INTEGER,"
                     + "recording TEXT)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_events_uuid ON events(uuid, created DESC)");
+            // v3：事件扣掉的信用點數（舊資料庫自動加欄位）
+            boolean hasDeducted = false;
+            try (ResultSet rs = st.executeQuery("PRAGMA table_info(events)")) {
+                while (rs.next()) {
+                    if ("trust_deducted".equalsIgnoreCase(rs.getString("name"))) {
+                        hasDeducted = true;
+                    }
+                }
+            }
+            if (!hasDeducted) {
+                st.execute("ALTER TABLE events ADD COLUMN trust_deducted INTEGER NOT NULL DEFAULT 0");
+            }
             st.execute("CREATE INDEX IF NOT EXISTS idx_events_created ON events(created)");
             st.execute("CREATE TABLE IF NOT EXISTS codes ("
                     + "code TEXT PRIMARY KEY,"
@@ -273,12 +285,13 @@ public final class Database {
             if (!events.isEmpty()) {
                 try (PreparedStatement ps = writeConn.prepareStatement(
                         "INSERT INTO events(event_id, uuid, name, category, created, last_seen, violations, "
-                                + "verdict, verdict_by, verdict_note, verdict_at, recording) "
-                                + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?) "
+                                + "verdict, verdict_by, verdict_note, verdict_at, recording, trust_deducted) "
+                                + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) "
                                 + "ON CONFLICT(event_id) DO UPDATE SET last_seen=excluded.last_seen, "
                                 + "violations=excluded.violations, verdict=excluded.verdict, "
                                 + "verdict_by=excluded.verdict_by, verdict_note=excluded.verdict_note, "
-                                + "verdict_at=excluded.verdict_at, recording=excluded.recording")) {
+                                + "verdict_at=excluded.verdict_at, recording=excluded.recording, "
+                                + "trust_deducted=excluded.trust_deducted")) {
                     for (EventRecord e : events.values()) {
                         ps.setLong(1, e.id());
                         ps.setString(2, e.uuid().toString());
@@ -296,6 +309,7 @@ public final class Database {
                             ps.setNull(11, Types.INTEGER);
                         }
                         ps.setString(12, e.recording());
+                        ps.setInt(13, e.trustDeducted());
                         ps.addBatch();
                     }
                     ps.executeBatch();
@@ -467,6 +481,23 @@ public final class Database {
         });
     }
 
+    public CompletableFuture<List<EventRecord>> unjudgedEvents(UUID uuid, int limit) {
+        return read(() -> {
+            List<EventRecord> out = new ArrayList<>();
+            try (PreparedStatement ps = readConn.prepareStatement(
+                    "SELECT * FROM events WHERE uuid=? AND verdict IS NULL ORDER BY created DESC LIMIT ?")) {
+                ps.setString(1, uuid.toString());
+                ps.setInt(2, Math.max(1, Math.min(limit, 1000)));
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        out.add(readEvent(rs));
+                    }
+                }
+            }
+            return out;
+        });
+    }
+
     public CompletableFuture<Optional<TrustRecord>> findTrust(UUID uuid) {
         return read(() -> {
             try (PreparedStatement ps = readConn.prepareStatement("SELECT * FROM trust WHERE uuid=?")) {
@@ -552,7 +583,8 @@ public final class Database {
                 rs.getString("verdict_by"),
                 rs.getString("verdict_note"),
                 verdictAt,
-                rs.getString("recording"));
+                rs.getString("recording"),
+                rs.getInt("trust_deducted"));
     }
 
     private static CodeRecord readCode(ResultSet rs) throws SQLException {

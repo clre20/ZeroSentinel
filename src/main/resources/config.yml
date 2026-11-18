@@ -76,6 +76,13 @@ checks:
     remove-violations-after: 60
     # 是否檢查基岩版玩家（封包經 Geyser 轉換，預設不檢查）
     check-bedrock: false
+    # 注意：只有在「不送移動封包、但有聊天 / 指令 / 點擊等操作」時才走上面的處罰流程
+
+  # 客戶端無回應：不送移動封包、也沒有任何操作，只剩 keep-alive 等網路層封包（通常是客戶端卡住）
+  # 不扣信用、不警告，超過設定秒數就踢出並請玩家重新進入；不算入「踢出後再犯」
+  client-frozen:
+    enabled: true
+    kick-after-seconds: 60
 
 # 信用點數
 trust:

@@ -4,8 +4,10 @@ ZeroSentinel 是一款專為 Paper (Minecraft 26.3+) 伺服器設計的反作弊
 
 ## 功能特性
 
-* **客戶端回報異常檢查**：
-  * 正常的 Java 版客戶端（1.9～26.x）不論是否在掛機，每秒都會送出移動或 tick 結束封包；超過 10 秒都沒有、但連線仍在，就判定為異常（例如機器人或凍結位置的外掛）。
+* **客戶端回報異常 / 客戶端無回應**：
+  * 正常的 Java 版客戶端（1.9～26.x）不論是否在掛機，每秒都會送出移動或 tick 結束封包。
+  * 超過 10 秒沒有、但**同時還在聊天、下指令、點擊或攻擊**：判定為異常（機器人或凍結位置的外掛），走完整處罰流程。
+  * 超過 60 秒沒有、**也沒有任何操作**：判定為客戶端卡住，不扣信用、不警告，直接請玩家重新進入。
   * 進服、切換世界、重生後 15 秒內，死亡期間，以及伺服器整體停頓後 5 秒內都不檢查；基岩版預設不檢查。
   * 已用 50 多份真實錄製回放驗證，正常玩家 0 誤判。
 * **信用點數與分級處罰**：
@@ -13,6 +15,7 @@ ZeroSentinel 是一款專為 Paper (Minecraft 26.3+) 伺服器設計的反作弊
   * 違規時警告並扣分，累積到門檻就踢出（附原因與錯誤碼），踢出後 30 分鐘內再犯會直接踢出。
   * 信用越高，需要越多次違規才會被踢；連續在線沒有違規會慢慢加分（每日有上限）。
   * 分數過低時無法進服（不是封鎖），提示玩家開客服單；管理員可隨時調整分數，所有修改都有紀錄。
+  * 管理員把事件判定為合法（誤判）時，自動退還該事件扣掉的分數；可一次判定某位玩家的所有事件。
   * 伺服器 TPS 過低時暫停處罰，只記錄並通知管理員。
 * **伺服器停頓偵測**：
   * 獨立的看門狗執行緒偵測整個伺服器的停頓（例如 GC），停頓後的寬限時間內不累積違規，並在後台記錄停頓長度。
@@ -66,7 +69,8 @@ ZeroSentinel 是一款專為 Paper (Minecraft 26.3+) 伺服器設計的反作弊
 | `/zs record <玩家\|all> [秒數]` | 存下最近的封包並繼續錄製（`all` = 所有線上玩家） | 遊戲內 / 控制台 | `zerosentinel.record` | OP |
 | `/zs record stop <玩家\|all>` | 提前停止錄製並存檔 | 遊戲內 / 控制台 | `zerosentinel.record` | OP |
 | `/zs lookup <錯誤碼>` | 查詢錯誤碼對應的事件 | 遊戲內 / 控制台 | `zerosentinel.lookup` | OP |
-| `/zs verdict <事件ID或錯誤碼> <legit\|cheat> [備註]` | 判定事件為合法或作弊 | 遊戲內 / 控制台 | `zerosentinel.verdict` | OP |
+| `/zs verdict <事件ID或錯誤碼> <legit\|cheat> [備註]` | 判定事件為合法或作弊（合法時自動退還扣分） | 遊戲內 / 控制台 | `zerosentinel.verdict` | OP |
+| `/zs verdict player <玩家> <legit\|cheat> [備註]` | 一次判定該玩家所有未判定的事件（可離線） | 遊戲內 / 控制台 | `zerosentinel.verdict` | OP |
 | `/zs versions` | 統計線上玩家使用的版本 | 遊戲內 / 控制台 | `zerosentinel.versions` | OP |
 | `/zs trust` | 查看自己的信用點數 | 僅限玩家 | `zerosentinel.trust` | 所有人 |
 | `/zs trust <玩家>` | 查看玩家的信用點數（可離線） | 遊戲內 / 控制台 | `zerosentinel.trust.admin` | OP |
@@ -101,9 +105,9 @@ ZeroSentinel 是一款專為 Paper (Minecraft 26.3+) 伺服器設計的反作弊
 
 ### 3. 用離線工具查看錄製檔
 ```bash
-java -jar ZeroSentinel-1.1.0.jar info recordings/2026-11-16/123045_Steve_manual.zsr.gz
-java -jar ZeroSentinel-1.1.0.jar dump recordings/2026-11-16/123045_Steve_manual.zsr.gz 50
-java -jar ZeroSentinel-1.1.0.jar test 題庫資料夾
+java -jar ZeroSentinel-1.1.1.jar info recordings/2026-11-16/123045_Steve_manual.zsr.gz
+java -jar ZeroSentinel-1.1.1.jar dump recordings/2026-11-16/123045_Steve_manual.zsr.gz 50
+java -jar ZeroSentinel-1.1.1.jar test 題庫資料夾
 ```
 
 ## 設定檔
@@ -128,6 +132,7 @@ java -jar ZeroSentinel-1.1.0.jar test 題庫資料夾
 | `checks.client-report.kick-after` | 正常信用下累積幾次踢出 | `6` |
 | `checks.client-report.repeat-kick-minutes` | 踢出後幾分鐘內再犯直接踢 | `30` |
 | `checks.client-report.trust-per-violation` / `trust-per-kick` | 每次違規 / 踢出扣的信用 | `5` / `30` |
+| `checks.client-frozen.enabled` / `kick-after-seconds` | 客戶端卡住時踢出（不扣信用） / 幾秒後踢出 | `true` / `60` |
 | `trust.start` / `max` | 初始分數 / 上限 | `500` / `1000` |
 | `trust.deny-join-at` | 分數小於等於此值無法進服（-1 關閉） | `0` |
 | `trust.gain.amount` / `every-minutes` / `daily-cap` | 在線無違規加分 | `2` / `30` / `20` |
@@ -144,8 +149,10 @@ ZeroSentinel is an anti-cheat plugin for Paper (Minecraft 26.3+) servers, built 
 
 ## Features
 
-* **Abnormal client reporting check**:
-  * A normal Java client (1.9–26.x) sends movement or tick-end packets every second, even while AFK. More than 10 seconds without them while the connection is still alive is flagged (bots, position-freezing hacks).
+* **Abnormal client reporting / unresponsive client**:
+  * A normal Java client (1.9–26.x) sends movement or tick-end packets every second, even while AFK.
+  * More than 10 seconds without them **while still chatting, running commands, clicking or attacking** is flagged as abnormal (bots, position-freezing hacks) and goes through the full punishment flow.
+  * More than 60 seconds without them **and no actions at all** is treated as a frozen client: no trust loss, no warnings, the player is asked to rejoin.
   * Skipped for 15 seconds after join, world change and respawn, while dead, and for 5 seconds after a whole-server stall; Bedrock is skipped by default.
   * Replayed against 50+ real recordings with zero false positives.
 * **Trust score & tiered punishments**:
@@ -153,6 +160,7 @@ ZeroSentinel is an anti-cheat plugin for Paper (Minecraft 26.3+) servers, built 
   * Violations warn and deduct points; reaching the threshold kicks with a reason and error code, and re-offending within 30 minutes of a kick kicks immediately.
   * Higher trust needs more violations before a kick; clean playtime slowly restores points (with a daily cap).
   * Players at or below the minimum cannot join (not a ban) and are told to open a support ticket; staff can adjust scores anytime and every change is logged.
+  * Marking an event legit (false positive) automatically refunds the points it deducted; all of a player's events can be judged at once.
   * Punishments pause when TPS is low; violations are only logged and reported to staff.
 * **Server stall detection**:
   * A dedicated watchdog thread detects whole-server stalls (e.g. GC) and ignores violations during the grace period afterwards.
@@ -206,7 +214,8 @@ The primary command for this plugin is `/zerosentinel`.
 | `/zs record <player\|all> [seconds]` | Save recent packets and keep recording (`all` = every online player) | In-game / Console | `zerosentinel.record` | OP |
 | `/zs record stop <player\|all>` | Stop recording early and save | In-game / Console | `zerosentinel.record` | OP |
 | `/zs lookup <code>` | Look up the event behind an error code | In-game / Console | `zerosentinel.lookup` | OP |
-| `/zs verdict <eventId\|code> <legit\|cheat> [note]` | Mark an event legit or cheat | In-game / Console | `zerosentinel.verdict` | OP |
+| `/zs verdict <eventId\|code> <legit\|cheat> [note]` | Mark an event legit or cheat (legit refunds deducted points) | In-game / Console | `zerosentinel.verdict` | OP |
+| `/zs verdict player <player> <legit\|cheat> [note]` | Judge all of a player's unjudged events at once (offline OK) | In-game / Console | `zerosentinel.verdict` | OP |
 | `/zs versions` | Count online players by version | In-game / Console | `zerosentinel.versions` | OP |
 | `/zs trust` | Show your own trust score | Player only | `zerosentinel.trust` | Everyone |
 | `/zs trust <player>` | Show a player's trust score (offline OK) | In-game / Console | `zerosentinel.trust.admin` | OP |

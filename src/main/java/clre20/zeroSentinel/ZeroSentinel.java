@@ -49,6 +49,7 @@ public final class ZeroSentinel extends JavaPlugin {
     private PlayerDataManager playerDataManager;
     private TrustManager trustManager;
     private PunishmentManager punishmentManager;
+    private clre20.zeroSentinel.punish.VerdictService verdictService;
     private LagMonitor lagMonitor;
     private ClientReportCheck clientReportCheck;
     private PacketListenerCommon checkListener;
@@ -78,6 +79,7 @@ public final class ZeroSentinel extends JavaPlugin {
 
         trustManager = new TrustManager(database, configManager, getLogger());
         punishmentManager = new PunishmentManager(this);
+        verdictService = new clre20.zeroSentinel.punish.VerdictService(eventManager, trustManager);
         playerDataManager = new PlayerDataManager();
         lagMonitor = new LagMonitor(getLogger(), () -> configManager.getLagStallThresholdMs(),
                 () -> configManager.getLagGraceSeconds() * 1000L);
@@ -246,6 +248,10 @@ public final class ZeroSentinel extends JavaPlugin {
 
     public TrustManager getTrustManager() {
         return trustManager;
+    }
+
+    public clre20.zeroSentinel.punish.VerdictService getVerdictService() {
+        return verdictService;
     }
 
     public PunishmentManager getPunishmentManager() {

@@ -22,7 +22,8 @@ help:
   record: '&f/{label} record <玩家|all> [秒數] &7- 存下最近的封包並繼續錄製（all = 所有線上玩家）'
   record-stop: '&f/{label} record stop <玩家|all> &7- 提前停止錄製並存檔'
   lookup: '&f/{label} lookup <錯誤碼> &7- 查詢錯誤碼對應的事件'
-  verdict: '&f/{label} verdict <事件ID或錯誤碼> <legit|cheat> [備註] &7- 判定事件'
+  verdict: '&f/{label} verdict <事件ID或錯誤碼> <legit|cheat> [備註] &7- 判定事件（判定合法會自動退還扣分）'
+  verdict-player: '&f/{label} verdict player <玩家> <legit|cheat> [備註] &7- 一次判定該玩家所有未判定的事件'
   debug: '&f/{label} debug flag <玩家> &7- 建立測試事件（需開啟 debug.enabled）'
   debug-violation: '&f/{label} debug violation <玩家> &7- 模擬一次「客戶端回報異常」違規，走完整處罰流程（需開啟 debug.enabled）'
   reload: '&f/{label} reload &7- 重新載入設定'
@@ -67,6 +68,9 @@ verdict:
   invalid-target: '&c&f{input} &c不是有效的事件 ID 或錯誤碼。'
   not-found: '&c找不到這個事件。'
   done: '&a已將事件 &f{event} &a判定為 {verdict}&a。'
+  refunded: '&a已退還 &f{refund} &a信用點數給 &f{player}&a。'
+  bulk-done: '&a已將 &f{player} &a的 &f{count} &a個事件判定為 {verdict}&a。'
+  bulk-none: '&e{player} 沒有尚未判定的事件。'
 
 debug:
   disabled: '&c測試指令未開啟，請在 config.yml 設定 debug.enabled: true。'
@@ -93,6 +97,12 @@ checks:
       &c你的遊戲沒有正常回報角色狀態，請改用正常的客戶端後再進入。
       &f錯誤碼：&e{code}
 
+  client-frozen:
+    name: '客戶端無回應'
+    kick: |-
+      &e你的遊戲似乎卡住了（超過 {seconds} 秒沒有回應），請重新進入伺服器。
+      &f錯誤碼：&e{code}
+
 # 給有 zerosentinel.alerts 權限的管理員
 alerts:
   violation: '&c[警告] &f{player} &7{check}（{count}/{max}）信用 &f{trust} &8{event}'
@@ -100,6 +110,7 @@ alerts:
   kicked-repeat: '&4[踢出] &f{player} &7{check}（踢出後再犯），信用 &f{trust} &8{event}'
   kicked-trust: '&4[踢出] &f{player} &7信用點數過低（{trust}） &8{event}'
   join-denied: '&4[拒絕進服] &f{player} &7信用點數 {trust}，錯誤碼 &f{code}'
+  frozen: '&6[卡住踢出] &f{player} &7客戶端超過 {seconds} 秒沒有回應（不扣信用） &8{event}'
   paused: '&6[暫停處罰] &f{player} &7{check}，伺服器 TPS {tps} 過低，只記錄不處罰 &8{event}'
 
 trust:
