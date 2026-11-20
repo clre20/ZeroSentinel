@@ -74,6 +74,10 @@ public final class CheckPacketListener implements PacketListener {
         if (!(type instanceof PacketType.Play.Client client)) {
             return;
         }
+        // transaction 的 PONG 每秒都會回來，不能拿來判斷「連線還活著」，否則會改變 ClientReport 的判定
+        if (client == PacketType.Play.Client.PONG) {
+            return;
+        }
         User user = event.getUser();
         if (user == null) {
             return;

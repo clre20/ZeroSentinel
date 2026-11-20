@@ -139,13 +139,16 @@ public final class GuiManager {
                 : java.util.Objects.requireNonNullElse(clre20.zeroSentinel.util.Versions.name(protocolNum),
                 msg().raw("versions.unknown", "protocol", protocol));
         String trustScore = String.valueOf(plugin.getTrustManager().score(id));
+        clre20.zeroSentinel.check.PlayerData pd = plugin.getPlayerDataManager().get(id);
+        long pingMs = pd == null ? -1 : pd.transaction().pingMs();
+        String ping = pingMs < 0 ? msg().raw("gui.player.ping-unknown") : String.valueOf(pingMs);
         long remaining = rec.remainingSeconds(id);
         String status = remaining >= 0
                 ? msg().raw("gui.player.status-recording", "seconds", String.valueOf(remaining))
                 : msg().raw("gui.player.status-idle");
         inv.setItem(SLOT_INFO, playerHead(target, "gui.player.info-name", "gui.player.info-lore",
                 "uuid", id.toString(), "protocol", protocol, "version", versionName, "bedrock", bedrock,
-                "status", status, "trust", trustScore));
+                "status", status, "trust", trustScore, "ping", ping));
         if (remaining >= 0) {
             inv.setItem(SLOT_RECORD, item(Material.RED_CONCRETE, "gui.player.record-stop",
                     "gui.player.record-stop-lore", "seconds", String.valueOf(remaining)));

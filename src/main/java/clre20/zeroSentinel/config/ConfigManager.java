@@ -57,6 +57,24 @@ public final class ConfigManager {
     private volatile boolean clientFrozenEnabled = true;
     private volatile int clientFrozenKickSeconds = 60;
 
+    // transaction
+    private volatile int transactionIntervalMs = 1000;
+
+    // 封包檢查
+    private volatile boolean packetChecksEnabled = true;
+    private volatile boolean packetChecksBedrock = false;
+    private volatile boolean packetChecksCancel = true;
+    private volatile int packetAlertIntervalSeconds = 10;
+    private volatile java.util.Set<clre20.zeroSentinel.check.PacketRule> packetRulesDisabled =
+            java.util.EnumSet.noneOf(clre20.zeroSentinel.check.PacketRule.class);
+    private volatile int limitNameItem = 50;
+    private volatile int limitTabComplete = 2048;
+    private volatile int limitPluginMessage = 32767;
+    private volatile int limitBookPages = 100;
+    private volatile int limitBookPageChars = 1024;
+    private volatile int limitBookTitle = 32;
+    private volatile int limitSignLine = 384;
+
     // 信用點數
     private volatile int trustStart = 500;
     private volatile int trustMax = 1000;
@@ -128,6 +146,30 @@ public final class ConfigManager {
         clientReportCheckBedrock = cfg.getBoolean("checks.client-report.check-bedrock", false);
         clientFrozenEnabled = cfg.getBoolean("checks.client-frozen.enabled", true);
         clientFrozenKickSeconds = clamp(cfg.getInt("checks.client-frozen.kick-after-seconds", 60), 10, 3600);
+
+        transactionIntervalMs = clamp(cfg.getInt("transaction.interval-ms", 1000), 200, 10_000);
+
+        packetChecksEnabled = cfg.getBoolean("checks.packets.enabled", true);
+        packetChecksBedrock = cfg.getBoolean("checks.packets.check-bedrock", false);
+        packetChecksCancel = cfg.getBoolean("checks.packets.cancel", true);
+        packetAlertIntervalSeconds = clamp(cfg.getInt("checks.packets.alert-interval-seconds", 10), 1, 3600);
+        java.util.Set<clre20.zeroSentinel.check.PacketRule> disabled =
+                java.util.EnumSet.noneOf(clre20.zeroSentinel.check.PacketRule.class);
+        for (String key : cfg.getStringList("checks.packets.disabled")) {
+            for (clre20.zeroSentinel.check.PacketRule r : clre20.zeroSentinel.check.PacketRule.values()) {
+                if (r.key().equalsIgnoreCase(key)) {
+                    disabled.add(r);
+                }
+            }
+        }
+        packetRulesDisabled = disabled;
+        limitNameItem = clamp(cfg.getInt("checks.packets.limits.name-item", 50), 1, 32767);
+        limitTabComplete = clamp(cfg.getInt("checks.packets.limits.tab-complete", 2048), 1, 32767);
+        limitPluginMessage = clamp(cfg.getInt("checks.packets.limits.plugin-message-bytes", 32767), 1, 2_097_152);
+        limitBookPages = clamp(cfg.getInt("checks.packets.limits.book-pages", 100), 1, 10_000);
+        limitBookPageChars = clamp(cfg.getInt("checks.packets.limits.book-page-chars", 1024), 1, 32767);
+        limitBookTitle = clamp(cfg.getInt("checks.packets.limits.book-title", 32), 1, 32767);
+        limitSignLine = clamp(cfg.getInt("checks.packets.limits.sign-line", 384), 1, 32767);
 
         trustMax = clamp(cfg.getInt("trust.max", 1000), 1, 1_000_000);
         trustStart = clamp(cfg.getInt("trust.start", 500), 0, trustMax);
@@ -267,4 +309,17 @@ public final class ConfigManager {
     public int getLagStallThresholdMs() { return lagStallThresholdMs; }
     public int getLagGraceSeconds() { return lagGraceSeconds; }
     public double getLagMinTps() { return lagMinTps; }
+    public int getTransactionIntervalMs() { return transactionIntervalMs; }
+    public boolean isPacketChecksEnabled() { return packetChecksEnabled; }
+    public boolean isPacketChecksBedrock() { return packetChecksBedrock; }
+    public boolean isPacketChecksCancel() { return packetChecksCancel; }
+    public int getPacketAlertIntervalSeconds() { return packetAlertIntervalSeconds; }
+    public boolean isPacketRuleDisabled(clre20.zeroSentinel.check.PacketRule rule) { return packetRulesDisabled.contains(rule); }
+    public int getLimitNameItem() { return limitNameItem; }
+    public int getLimitTabComplete() { return limitTabComplete; }
+    public int getLimitPluginMessage() { return limitPluginMessage; }
+    public int getLimitBookPages() { return limitBookPages; }
+    public int getLimitBookPageChars() { return limitBookPageChars; }
+    public int getLimitBookTitle() { return limitBookTitle; }
+    public int getLimitSignLine() { return limitSignLine; }
 }

@@ -53,6 +53,8 @@ public final class ZeroSentinel extends JavaPlugin {
     private LagMonitor lagMonitor;
     private ClientReportCheck clientReportCheck;
     private PacketListenerCommon checkListener;
+    private clre20.zeroSentinel.check.TransactionManager transactionManager;
+    private clre20.zeroSentinel.check.PacketCheckListener packetCheckListener;
 
     @Override
     public void onEnable() {
@@ -94,11 +96,13 @@ public final class ZeroSentinel extends JavaPlugin {
 
         checkListener = PacketEvents.getAPI().getEventManager().registerListener(
                 new CheckPacketListener(playerDataManager), PacketListenerPriority.LOWEST);
+        transactionManager = new clre20.zeroSentinel.check.TransactionManager(this, playerDataManager);
+        packetCheckListener = new clre20.zeroSentinel.check.PacketCheckListener(this, playerDataManager, transactionManager);
+        packetCheckListener.register();
+        transactionManager.start();
         // 插件重載時已在線上的玩家
         for (org.bukkit.entity.Player p : getServer().getOnlinePlayers()) {
-            playerDataManager.put(new clre20.zeroSentinel.check.PlayerData(p.getUniqueId(), p.getName(),
-                    FloodgateHook.isBedrock(p.getUniqueId()), Versions.protocol(p), System.nanoTime(),
-                    configManager.getJoinGraceSeconds() * 1_000_000_000L));
+            playerDataManager.put(newPlayerData(p));
             trustManager.load(p.getUniqueId(), p.getName());
             trustManager.onJoin(p.getUniqueId());
         }
@@ -149,6 +153,12 @@ public final class ZeroSentinel extends JavaPlugin {
         }
         if (checkListener != null) {
             PacketEvents.getAPI().getEventManager().unregisterListener(checkListener);
+        }
+        if (packetCheckListener != null) {
+            packetCheckListener.unregister();
+        }
+        if (transactionManager != null) {
+            transactionManager.stop();
         }
         if (lagMonitor != null) {
             lagMonitor.stop();
@@ -248,6 +258,21 @@ public final class ZeroSentinel extends JavaPlugin {
 
     public TrustManager getTrustManager() {
         return trustManager;
+    }
+
+    /** 主執行緒：為玩家建立檢查狀態（進服或插件重載時） */
+    public clre20.zeroSentinel.check.PlayerData newPlayerData(org.bukkit.entity.Player p) {
+        clre20.zeroSentinel.check.PlayerData d = new clre20.zeroSentinel.check.PlayerData(p.getUniqueId(), p.getName(),
+                FloodgateHook.isBedrock(p.getUniqueId()), Versions.protocol(p), System.nanoTime(),
+                configManager.getJoinGraceSeconds() * 1_000_000_000L);
+        d.setEntityId(p.getEntityId());
+        d.transaction().setConfirmed(p.getAllowFlight(), p.getGameMode() == org.bukkit.GameMode.CREATIVE);
+        try {
+            d.setPeUser(PacketEvents.getAPI().getPlayerManager().getUser(p));
+        } catch (RuntimeException ignored) {
+            // 取不到時不送 PING
+        }
+        return d;
     }
 
     public clre20.zeroSentinel.punish.VerdictService getVerdictService() {

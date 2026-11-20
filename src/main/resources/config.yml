@@ -84,6 +84,34 @@ checks:
     enabled: true
     kick-after-seconds: 60
 
+  # 封包層檢查（防崩服與異常封包）。目前只通知管理員，不扣信用、不警告、不踢出
+  packets:
+    enabled: true
+    # 異常封包類是否也檢查基岩版（防崩服類一律檢查）
+    check-bedrock: false
+    # 防崩服類（以及非創造模式送創造物品欄、攻擊自己）是否直接取消封包
+    cancel: true
+    # 同一位玩家同一條規則，幾秒內最多通知一次（期間的次數會累加到下一次通知）
+    alert-interval-seconds: 10
+    # 要關閉的規則（填規則代號，例如 duplicate-slot）
+    disabled: []
+    # 上限（超過就觸發）
+    limits:
+      name-item: 50
+      # 指令方塊編輯時可能較長，Paper 本身對超過 2048 字的補全也會拒絕
+      tab-complete: 2048
+      # 插件訊息內容（不含頻道名稱）
+      plugin-message-bytes: 32767
+      book-pages: 100
+      book-page-chars: 1024
+      book-title: 32
+      sign-line: 384
+
+# transaction（PING / PONG）：測量真實延遲、確認客戶端已收到伺服器的狀態變更
+transaction:
+  # 每位玩家每隔幾毫秒送一次（200～10000）
+  interval-ms: 1000
+
 # 信用點數
 trust:
   # 新玩家的初始分數
