@@ -137,6 +137,21 @@ public final class PunishmentManager {
                 "event", EventId.format(flag.event().id()));
     }
 
+    /**
+     * 封包層檢查（1.2.0 為 experimental）：只建立事件、錄製並通知管理員，不扣信用、不警告、不踢出。
+     * 主執行緒呼叫；玩家可能已離線。
+     */
+    public void packetAlert(UUID uuid, String name, clre20.zeroSentinel.check.PacketRule rule, int count, String detail) {
+        EventManager events = plugin.getEventManager();
+        EventManager.FlagResult flag = events.flag(uuid, name, rule.category());
+        if (flag.isNew() && plugin.getServer().getPlayer(uuid) != null) {
+            plugin.getRecordingManager().startForEvent(uuid, flag.event().id());
+        }
+        String detailText = detail == null || detail.isEmpty() ? "" : msg().raw("alerts.packet-detail", "detail", detail);
+        alert("alerts.packet", "player", name, "check", msg().raw("checks.packet." + rule.key()),
+                "count", String.valueOf(count), "detail", detailText, "event", EventId.format(flag.event().id()));
+    }
+
     /** 通知有 zerosentinel.alerts 權限的線上管理員，並寫入後台 */
     public void alert(String key, String... placeholders) {
         if (!config().isAlertsEnabled()) {

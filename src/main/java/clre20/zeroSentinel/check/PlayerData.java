@@ -31,6 +31,15 @@ public final class PlayerData {
     /** 這次連線是否送過任何移動 / tick 結束類封包 */
     volatile boolean movedOnce;
 
+    /** PING / PONG 狀態 */
+    private final TransactionState transaction = new TransactionState();
+    /** 封包檢查狀態（netty 執行緒） */
+    private final PacketCheckState packets = new PacketCheckState();
+    /** PacketEvents 的 User（只用來送 PING；玩家離線時整個 PlayerData 移除） */
+    private volatile Object peUser;
+    /** 玩家自己的實體 ID */
+    private volatile int entityId = Integer.MIN_VALUE;
+
     // ---- 主執行緒 ----
     int clientReportVl;
     /** 已因客戶端無回應被踢出（避免同一次連線重複處理） */
@@ -79,6 +88,30 @@ public final class PlayerData {
 
     public long lastAnyNanos() {
         return lastAnyNanos;
+    }
+
+    public TransactionState transaction() {
+        return transaction;
+    }
+
+    public PacketCheckState packets() {
+        return packets;
+    }
+
+    public Object peUser() {
+        return peUser;
+    }
+
+    public void setPeUser(Object user) {
+        this.peUser = user;
+    }
+
+    public int entityId() {
+        return entityId;
+    }
+
+    public void setEntityId(int id) {
+        this.entityId = id;
     }
 
     public void exemptFor(long nowNanos, long graceNanos) {

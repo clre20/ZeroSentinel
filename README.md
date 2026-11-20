@@ -9,7 +9,14 @@ ZeroSentinel 是一款專為 Paper (Minecraft 26.3+) 伺服器設計的反作弊
   * 超過 10 秒沒有、但**同時還在聊天、下指令、點擊或攻擊**：判定為異常（機器人或凍結位置的外掛），走完整處罰流程。
   * 超過 60 秒沒有、**也沒有任何操作**：判定為客戶端卡住，不扣信用、不警告，直接請玩家重新進入。
   * 進服、切換世界、重生後 15 秒內，死亡期間，以及伺服器整體停頓後 5 秒內都不檢查；基岩版預設不檢查。
-  * 已用 50 多份真實錄製回放驗證，正常玩家 0 誤判。
+  * 已用 160 多份真實錄製回放驗證，正常玩家 0 誤判。
+* **防崩服與異常封包檢查（實驗中，只通知管理員）**：
+  * 防崩服：座標為 NaN 或超出世界、手持格越界、鐵砧名稱 / Tab 補全 / 插件訊息 / 書本 / 告示牌內容超過上限，預設直接取消該封包。
+  * 異常封包：視角超出範圍、重複切換同一手持格、重複送出疾跑狀態、確認不存在的傳送、沒有權限卻回報飛行、非創造模式送出創造物品欄、攻擊或互動自己。
+  * 目前只建立事件、自動錄製並通知管理員，**不扣信用、不警告、不踢出**；同一規則 10 秒內最多通知一次。
+  * 異常封包類預設不檢查基岩版；每條規則都能在 `checks.packets.disabled` 單獨關閉。
+* **Transaction 同步（PING / PONG）**：
+  * 每秒對每位玩家送一次 PING，測量真實延遲（顯示在玩家頁），並確認客戶端何時收到伺服器的權限變更，避免切換飛行 / 創造模式時誤判。
 * **信用點數與分級處罰**：
   * 每位玩家一個信用點數（預設 500 / 1000），玩家可用 `/zs trust` 查看自己的分數。
   * 違規時警告並扣分，累積到門檻就踢出（附原因與錯誤碼），踢出後 30 分鐘內再犯會直接踢出。
@@ -133,6 +140,10 @@ java -jar ZeroSentinel-1.1.1.jar test 題庫資料夾
 | `checks.client-report.repeat-kick-minutes` | 踢出後幾分鐘內再犯直接踢 | `30` |
 | `checks.client-report.trust-per-violation` / `trust-per-kick` | 每次違規 / 踢出扣的信用 | `5` / `30` |
 | `checks.client-frozen.enabled` / `kick-after-seconds` | 客戶端卡住時踢出（不扣信用） / 幾秒後踢出 | `true` / `60` |
+| `checks.packets.enabled` / `check-bedrock` / `cancel` | 封包層檢查 / 檢查基岩版 / 取消防崩服封包 | `true` / `false` / `true` |
+| `checks.packets.alert-interval-seconds` / `disabled` | 同一規則通知間隔 / 關閉的規則 | `10` / `[]` |
+| `checks.packets.limits.*` | 名稱、補全、插件訊息、書本、告示牌上限 | `50` / `2048` / `32767` / `100`·`1024`·`32` / `384` |
+| `transaction.interval-ms` | 每位玩家送 PING 的間隔（毫秒） | `1000` |
 | `trust.start` / `max` | 初始分數 / 上限 | `500` / `1000` |
 | `trust.deny-join-at` | 分數小於等於此值無法進服（-1 關閉） | `0` |
 | `trust.gain.amount` / `every-minutes` / `daily-cap` | 在線無違規加分 | `2` / `30` / `20` |
@@ -154,7 +165,14 @@ ZeroSentinel is an anti-cheat plugin for Paper (Minecraft 26.3+) servers, built 
   * More than 10 seconds without them **while still chatting, running commands, clicking or attacking** is flagged as abnormal (bots, position-freezing hacks) and goes through the full punishment flow.
   * More than 60 seconds without them **and no actions at all** is treated as a frozen client: no trust loss, no warnings, the player is asked to rejoin.
   * Skipped for 15 seconds after join, world change and respawn, while dead, and for 5 seconds after a whole-server stall; Bedrock is skipped by default.
-  * Replayed against 50+ real recordings with zero false positives.
+  * Replayed against 160+ real recordings with zero false positives.
+* **Crash-exploit & bad-packet checks (experimental, alerts only)**:
+  * Crash exploits: NaN or out-of-world positions, out-of-range hotbar slots, and oversized anvil names, tab completions, plugin messages, books and signs; these packets are cancelled by default.
+  * Bad packets: out-of-range pitch, re-selecting the same slot, repeated sprint state, confirming a teleport that was never sent, flying without permission, creative inventory actions outside creative, attacking or interacting with yourself.
+  * For now they only create an event, record and alert staff — **no trust loss, warnings or kicks**; each rule alerts at most once per 10 seconds.
+  * Bad-packet rules skip Bedrock by default; any rule can be turned off in `checks.packets.disabled`.
+* **Transaction sync (PING / PONG)**:
+  * Sends each player a PING every second to measure real latency (shown on the player page) and to know when the client has received ability changes, avoiding false flags when flight or creative mode is toggled.
 * **Trust score & tiered punishments**:
   * Every player has a trust score (500 / 1000 by default); players can check theirs with `/zs trust`.
   * Violations warn and deduct points; reaching the threshold kicks with a reason and error code, and re-offending within 30 minutes of a kick kicks immediately.

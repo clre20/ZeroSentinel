@@ -103,6 +103,23 @@ checks:
       &e你的遊戲似乎卡住了（超過 {seconds} 秒沒有回應），請重新進入伺服器。
       &f錯誤碼：&e{code}
 
+  # 封包層檢查（目前只通知管理員）
+  packet:
+    invalid-position: '座標異常（NaN 或超出世界範圍）'
+    invalid-rotation: '視角超出範圍'
+    invalid-slot: '手持格越界'
+    duplicate-slot: '重複切換同一個手持格'
+    duplicate-sprint: '重複送出疾跑狀態'
+    invalid-teleport-confirm: '確認了不存在的傳送'
+    illegal-flight: '沒有飛行權限卻回報飛行'
+    illegal-creative: '非創造模式卻送出創造物品欄'
+    self-interact: '攻擊或互動自己'
+    oversized-name: '鐵砧名稱過長'
+    oversized-tab-complete: 'Tab 補全內容過長'
+    oversized-payload: '插件訊息過大'
+    oversized-book: '書本內容過大'
+    oversized-sign: '告示牌內容過長'
+
 # 給有 zerosentinel.alerts 權限的管理員
 alerts:
   violation: '&c[警告] &f{player} &7{check}（{count}/{max}）信用 &f{trust} &8{event}'
@@ -110,6 +127,8 @@ alerts:
   kicked-repeat: '&4[踢出] &f{player} &7{check}（踢出後再犯），信用 &f{trust} &8{event}'
   kicked-trust: '&4[踢出] &f{player} &7信用點數過低（{trust}） &8{event}'
   join-denied: '&4[拒絕進服] &f{player} &7信用點數 {trust}，錯誤碼 &f{code}'
+  packet: '&e[異常封包] &f{player} &7{check}（{count} 次）{detail} &8{event}'
+  packet-detail: '&8[{detail}]'
   frozen: '&6[卡住踢出] &f{player} &7客戶端超過 {seconds} 秒沒有回應（不扣信用） &8{event}'
   paused: '&6[暫停處罰] &f{player} &7{check}，伺服器 TPS {tps} 過低，只記錄不處罰 &8{event}'
 
@@ -157,10 +176,12 @@ gui:
       - '&7UUID：&f{uuid}'
       - '&7版本：&f{version} &8(協議 {protocol})'
       - '&7信用點數：&f{trust}'
+      - '&7延遲：&f{ping} ms'
       - '&7基岩版：{bedrock}'
       - '&7錄製：{status}'
     status-recording: '&c錄製中（剩 {seconds} 秒）'
     status-idle: '&7未錄製'
+    ping-unknown: '-'
     record-start: '&a開始錄製'
     record-start-lore:
       - '&7包含最近 {buffer} 秒，並持續 {seconds} 秒'

@@ -90,9 +90,7 @@ public final class PlayerListener implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
-        long grace = plugin.getConfigManager().getJoinGraceSeconds() * 1_000_000_000L;
-        plugin.getPlayerDataManager().put(new PlayerData(uuid, player.getName(),
-                FloodgateHook.isBedrock(uuid), Versions.protocol(player), System.nanoTime(), grace));
+        plugin.getPlayerDataManager().put(plugin.newPlayerData(player));
         // 正常情況已在進服前載入；插件重載後加入的玩家在這裡補載入（非同步）
         plugin.getTrustManager().load(uuid, player.getName());
         plugin.getTrustManager().onJoin(uuid);
