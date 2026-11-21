@@ -2,6 +2,9 @@
 
 ZeroSentinel 是一款專為 Paper (Minecraft 26.3+) 伺服器設計的反作弊插件，目標是「誤判最低、準確度最高」。目前提供封包錄製回放、事件與錯誤碼系統、信用點數、分級處罰，以及第一個檢查項目「客戶端回報異常」；其餘作弊檢查會在後續版本陸續加入。
 
+
+> **版本檢查提示**：若伺服器有安裝 [HttpHub](https://github.com/clre20/HttpHub)，本插件自動由 HttpHub 集中處理版本檢查與管理員登入通知，避免各插件自開連線與背景執行緒。
+
 ## 功能特性
 
 * **客戶端回報異常 / 客戶端無回應**：
@@ -155,6 +158,9 @@ java -jar ZeroSentinel-1.1.1.jar test 題庫資料夾
 
 
 # ZeroSentinel
+
+
+> **Update Checker**: When [HttpHub](https://github.com/clre20/HttpHub) is installed, update checks and operator login alerts are handled centrally by HttpHub via virtual threads, preventing redundant background connections.
 
 ZeroSentinel is an anti-cheat plugin for Paper (Minecraft 26.3+) servers, built for the lowest possible false-positive rate and the highest accuracy. It currently provides packet recording and replay, an event and error-code system, trust scores, tiered punishments, and the first check, "abnormal client reporting"; more checks will follow.
 

@@ -134,7 +134,9 @@ public final class ZeroSentinel extends JavaPlugin {
         // 啟動 1 分鐘後清理一次資料庫過期資料，之後每天一次（實際刪除在資料庫寫入執行緒）
         cleanupTask = getServer().getScheduler().runTaskTimer(this, this::cleanupDatabase, 20L * 60, DAY_TICKS);
 
-        if (configManager.isUpdateCheckOnStartup()) {
+        if (getServer().getPluginManager().isPluginEnabled("HttpHub") && clre20.httpHub.api.HttpHubAPI.isAvailable()) {
+            clre20.httpHub.api.HttpHubAPI.registerUpdateCheck(this, "clre20/ZeroSentinel", getPluginMeta().getVersion(), "zerosentinel.version", null);
+        } else if (configManager.isUpdateCheckOnStartup()) {
             updateChecker.checkOnStartup();
         }
         getLogger().info("ZeroSentinel v" + getPluginMeta().getVersion() + " 已啟用。");

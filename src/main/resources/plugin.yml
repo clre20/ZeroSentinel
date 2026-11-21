@@ -6,7 +6,7 @@ author: clre20
 description: 低誤判、高準確度的反作弊插件。
 website: https://github.com/clre20/ZeroSentinel
 depend: [packetevents]
-softdepend: [floodgate, ViaVersion, PMonitor]
+softdepend: [ floodgate, ViaVersion, PMonitor, HttpHub ]
 libraries:
   - org.xerial:sqlite-jdbc:3.54.1.0
 
